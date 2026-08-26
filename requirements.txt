@@ -1,0 +1,10 @@
+playwright==1.62.0
+fastmcp
+python-dotenv
+openai>=1.0.0
+anthropic>=0.40.0
+langchain>=0.3
+langchain-core
+langchain-openai
+langchain-ollama
+langgraph>=0.2

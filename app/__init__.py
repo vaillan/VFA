@@ -1,0 +1,1 @@
+"""Agente Visual & Functional Auditor (VFA): modulos de configuracion, navegador, captura, vision, semantica y tools MCP."""

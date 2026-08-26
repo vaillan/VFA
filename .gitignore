@@ -1,0 +1,69 @@
+# ===== Python =====
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
+wheels/
+*.egg
+
+# ===== Entornos virtuales =====
+.venv/
+venv/
+env/
+ENV/
+.python-version
+
+# ===== Testing / Coverage =====
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+coverage.xml
+*.cover
+.hypothesis/
+
+# ===== Variables de entorno y secretos =====
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets.json
+
+# ===== IDEs / Editores =====
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.sublime-workspace
+.sublime-project
+
+# ===== Sistemas operativos =====
+.DS_Store
+Thumbs.db
+desktop.ini
+$RECYCLE.BIN/
+
+# ===== Logs y temporales =====
+*.log
+logs/
+tmp/
+temp/
+
+# ===== Artefactos generados del proyecto =====
+captures/
+screenshots/
+
+# ===== Cache local del proyecto =====
+.project_index/
+
+# ===== Node =====
+node_modules/
