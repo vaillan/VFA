@@ -1,5 +1,6 @@
 """Nodo de agente profundo (deepagents) del grafo VFA."""
 
+import uuid
 from functools import lru_cache
 from typing import Any, Dict, List, Optional
 
@@ -8,7 +9,11 @@ from langchain_core.tools import BaseTool, tool
 
 from app import config
 from app.graph.state import VFAState
+from app.session_pool import session_context
 from app.tools import qa_audit_url, qa_execute_user_flow, qa_get_runtime_errors
+
+
+_DEEP_SESSION_ID: str = f"deep-{uuid.uuid4().hex}"
 
 
 def _build_model_string() -> str:
@@ -68,9 +73,10 @@ def _build_prompt(state: VFAState) -> str:
 async def deep_node(state: VFAState) -> Dict[str, Any]:
     """Ejecuta el agente profundo y devuelve su resultado en `deep_result`."""
     try:
-        result = await _get_deep_agent().ainvoke(
-            {"messages": [{"role": "user", "content": _build_prompt(state)}]}
-        )
+        with session_context(_DEEP_SESSION_ID):
+            result = await _get_deep_agent().ainvoke(
+                {"messages": [{"role": "user", "content": _build_prompt(state)}]}
+            )
         return {"deep_result": result}
     except Exception as exc:  # noqa: BLE001 - no romper el grafo ante fallos del agente
         return {"deep_result": {"error": str(exc)}}

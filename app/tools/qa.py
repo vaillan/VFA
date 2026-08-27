@@ -8,9 +8,10 @@ realiza en server_mcp.py mediante mcp.tool()(func).
 import os
 from typing import Any, Dict, List, Optional
 
-from app.browser import _connect_browser, _new_page
+from app.browser import _close_browser, _connect_browser, _is_session_dead, _new_page
 from app.capture import _attach_console_capture, _capture_network_errors
 from app.semantic import _resolve_semantic_step
+from app.session_pool import get_current_session_id, pool
 from app.tools import parser
 from app.vision import _analyze_visual_with_llm
 
@@ -35,19 +36,6 @@ async def _open_page():
     return browser, page
 
 
-async def _close_browser(browser) -> None:
-    """Cierra el navegador solo si sigue abierto.
-
-    Args:
-        browser: instancia del navegador a cerrar; si es None no hace nada.
-    """
-    if browser is not None:
-        await browser.close()
-        playwright = getattr(browser, "_playwright", None)
-        if playwright is not None:
-            await playwright.stop()
-
-
 async def _goto(page, url):
     """Navega a la URL con wait_until y timeout estandarizados.
 
@@ -61,24 +49,6 @@ async def _goto(page, url):
         Response de Playwright de la navegación, o None si no se produjo respuesta.
     """
     return await page.goto(url, wait_until=NAVIGATION_WAIT_UNTIL, timeout=NAVIGATION_TIMEOUT_MS)
-
-
-def _is_session_dead(browser, page) -> bool:
-    """Detecta si la página o el navegador remoto se cerraron.
-
-    Defensivo: si los métodos de vida no existen (fakes) o lanzan excepción,
-    se asume sesión muerta solo ante evidencia real de cierre.
-    """
-    try:
-        is_closed = getattr(page, "is_closed", None)
-        if is_closed is not None and is_closed():
-            return True
-        is_connected = getattr(browser, "is_connected", None)
-        if is_connected is not None and not is_connected():
-            return True
-    except Exception:
-        return True
-    return False
 
 
 async def _capture_session_state(page) -> List[Dict[str, Any]]:
@@ -140,9 +110,9 @@ async def qa_audit_url(url: str, expected_screenshot_path: Optional[str] = None)
         js_exceptions, network_errors, screenshot_path, vision_analysis y passed.
         En fallo devuelve {"error": <mensaje>}.
     """
-    browser = None
+    session = await pool.acquire(get_current_session_id())
+    browser, page = session.browser, session.page
     try:
-        browser, page = await _open_page()
         console_errors = _attach_console_capture(page)
         js_exceptions, network_errors = _capture_network_errors(page)
 
@@ -506,9 +476,9 @@ async def qa_get_runtime_errors(url: str) -> Dict[str, Any]:
         Dict con: url, console_errors, js_exceptions y network_errors.
         En fallo devuelve {"error": <mensaje>}.
     """
-    browser = None
+    session = await pool.acquire(get_current_session_id())
+    browser, page = session.browser, session.page
     try:
-        browser, page = await _open_page()
         console_errors = _attach_console_capture(page)
         js_exceptions, network_errors = _capture_network_errors(page)
 
