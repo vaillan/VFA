@@ -84,3 +84,24 @@ def get_rate_limiter_settings() -> tuple[float, float]:
     rps = float(os.getenv("VFA_LLM_REQUESTS_PER_SECOND", "0"))
     checks = float(os.getenv("VFA_LLM_CHECKS_PER_SECOND", "10.0"))
     return rps, checks
+
+
+def get_session_pool_enabled() -> bool:
+    """Indica si el pool de sesiones persistentes está activo (VFA_SESSION_POOL_ENABLED)."""
+    return os.getenv("VFA_SESSION_POOL_ENABLED", "true").strip().lower() in ("1", "true", "yes")
+
+
+def get_session_pool_ttl() -> float:
+    """Retorna el TTL en segundos de las sesiones inactivas del pool (VFA_SESSION_POOL_TTL)."""
+    try:
+        return float(os.getenv("VFA_SESSION_POOL_TTL", "300"))
+    except ValueError:
+        return 300.0
+
+
+def get_session_pool_max_size() -> int:
+    """Retorna el número máximo de sesiones simultáneas del pool (VFA_SESSION_POOL_MAX_SIZE)."""
+    try:
+        return int(os.getenv("VFA_SESSION_POOL_MAX_SIZE", "5"))
+    except ValueError:
+        return 5
