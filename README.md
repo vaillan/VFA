@@ -36,17 +36,39 @@ Playwright (async)  ──CDP──►  Browserless (Docker, puerto 3000)
 - El orquestador es un **grafo LangGraph** que vive en `app/graph/`:
   - `state.py` — define el estado tipado `VFAState` que fluye entre los nodos.
   - `nodes.py` — re-export de compatibilidad: la implementación real de los
-    nodos async `browser_node`, `vision_node` y `semantic_node` y del router
-    condicional `route_after_browser` vive en `app/agents/` (`browser_agent.py`,
-    `vision_agent.py`, `semantic_agent.py`).
+    nodos async `browser_node`, `deep_node`, `vision_node` y `semantic_node` y
+    del router condicional `route_after_browser` vive en `app/agents/`
+    (`browser_agent.py`, `deep_agent.py`, `vision_agent.py`, `semantic_agent.py`).
   - `builder.py` — expone `build_graph()`/`get_compiled_graph()` y ensambla el
     `StateGraph` con el flujo:
-    `START → browser → condicional (route_after_browser: semantic si hay steps, vision si no) → vision → semantic → END`.
+    `START → browser → deep → condicional (route_after_browser: semantic si hay steps, vision si no) → vision → semantic → END`.
 - `server_mcp.py` compila y usa el grafo LangGraph; la API pública de las 3 tools
   MCP no cambió.
 - `requirements.txt` incluye `langgraph>=0.2` y ya no incluye `crewai`.
 - La conexión al navegador remoto se realiza en `app/browser.py` mediante
   Playwright y el endpoint CDP de Browserless.
+- `app/session_pool.py` implementa un **pool de sesiones persistentes** de
+  navegador con TTL configurable y evicción LRU, reutilizables entre llamadas MCP.
+- `app/tools/qa.py` implementa **reconexión automática** cuando la sesión remota
+  muere a mitad de ejecución, restaurando las cookies de sesión.
+
+### 1.1 Session Pool (`app/session_pool.py`)
+
+Pool de sesiones de navegador reutilizables con TTL configurable y evicción LRU.
+La clase `SessionPool` expone `acquire()`/`release()` y mantiene la conexión viva
+entre llamadas MCP, identificando cada sesión por `session_id` vía ContextVar.
+
+### 1.2 Deep Agent (`app/agents/deep_agent.py`)
+
+Agente autónomo construido con la librería `deepagents` (`create_deep_agent()`)
+que envuelve las 3 tools QA como tools de LangChain y se ejecuta como nodo `deep`
+del grafo.
+
+### 1.3 Reconexión automática (`app/tools/qa.py`)
+
+`qa_execute_user_flow` y `qa_audit_url` reconectan automáticamente
+(`MAX_RECONNECTS=3`) cuando la sesión remota muere a mitad de ejecución,
+capturando y restaurando las cookies de sesión.
 
 ---
 
@@ -130,6 +152,9 @@ del proyecto, `python-dotenv` lo carga automáticamente.
 | `VFA_VISION_API_KEY` | *(sin default)* | API key de visión. Si no se usa, hereda de `VFA_LLM_API_KEY`/`OPENAI_API_KEY`; si el proveedor es `anthropic`, acepta `ANTHROPIC_API_KEY`. |
 | `VFA_LLM_REQUESTS_PER_SECOND` | `0` | Peticiones por segundo del rate limiter. `0` desactiva el rate limiter. |
 | `VFA_LLM_CHECKS_PER_SECOND` | `10.0` | Frecuencia (en segundos) con la que el rate limiter revisa el cupo. |
+| `VFA_SESSION_POOL_ENABLED` | `true` | Activa el pool de sesiones persistentes entre llamadas a tools QA. |
+| `VFA_SESSION_POOL_TTL` | `300` | Segundos de inactividad antes de cerrar una sesión. |
+| `VFA_SESSION_POOL_MAX_SIZE` | `5` | Máximo de sesiones simultáneas (evicción LRU). |
 
 ### 5.2 Ejemplo de archivo `.env`
 
@@ -225,8 +250,12 @@ La suite incluye:
 - `tests/test_server_mcp_advanced.py`
 - `tests/test_vfa_graph.py`
 - `tests/test_vfa_llm.py`
+- `tests/test_deep_agent.py`
+- `tests/test_session_pool.py`
+- `tests/test_qa_reconnect.py`
+- `tests/test_vfa_semantic_llm.py`
 
-La suite completa consta de **20 tests**, todos pasando.
+La suite completa consta de 8 archivos de test, todos pasando.
 
 ---
 
