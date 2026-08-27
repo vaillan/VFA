@@ -17,17 +17,16 @@ El servidor expone exactamente **3 tools QA**:
 
 ## 1. Arquitectura general
 
-```
-Cliente MCP (stdio)
-        │
-        ▼
-server_mcp.py  (FastMCP — punto de entrada, registra las 3 tools QA)
-        │
-        ▼
-app/  (agents, graph, tools, config, browser, capture, vision, semantic)
-        │
-        ▼
-Playwright (async)  ──CDP──►  Browserless (Docker, puerto 3000)
+```mermaid
+graph TD
+    A[Cliente MCP · stdio] -->|stdio| B[server_mcp.py · FastMCP]
+    B -->|qa_audit_url · qa_execute_user_flow · qa_get_runtime_errors| C[Grafo LangGraph · app/graph/]
+    C -->|START → browser → deep| D{route_after_browser}
+    D -->|hay steps| E[semantic]
+    D -->|sin steps| F[vision]
+    E --> G[semantic → END]
+    F --> G
+    G -->|Playwright · CDP| H[Browserless · Docker · :3000]
 ```
 
 - La configuración central del proyecto vive en **`app/config.py`**, que lee las
