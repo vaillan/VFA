@@ -1,6 +1,6 @@
-# Browserless — Agente Visual & Functional Auditor (VFA)
+# VFA — Visual & Functional Auditor
 
-**Browserless — Agente Visual & Functional Auditor (VFA)** es un servidor MCP
+**VFA — Visual & Functional Auditor** es un servidor MCP
 (Model Context Protocol) construido con **FastMCP** que expone tres herramientas
 de QA para auditar aplicaciones web en un navegador remoto **Browserless**
 (ejecutado en Docker). El agente usa **Playwright** para conectarse al navegador
