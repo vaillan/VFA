@@ -18,3 +18,4 @@ class VFAState(TypedDict, total=False):
     runtime_errors_result: Optional[Dict[str, Any]]
     visual_result: Optional[Dict[str, Any]]
     semantic_result: Optional[Dict[str, Any]]
+    deep_result: Optional[Dict[str, Any]]

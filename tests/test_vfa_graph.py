@@ -29,10 +29,10 @@ def test_route_after_browser_sin_steps():
 
 
 def test_aristas_condicionales():
-    """Existe una arista condicional desde el nodo browser hacia vision y semantic."""
+    """Existe una arista condicional desde el nodo deep hacia vision y semantic."""
     graph = build_graph()
-    assert "browser" in graph.branches
-    mapping = graph.branches["browser"]
+    assert "deep" in graph.branches
+    mapping = graph.branches["deep"]
     # En esta versión de LangGraph, mapping es un dict {nombre_funcion: BranchSpec}
     # donde cada BranchSpec.ends contiene los destinos de la arista condicional.
     destinos = set()

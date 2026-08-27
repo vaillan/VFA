@@ -3,20 +3,23 @@
 from langgraph.graph import END, START, StateGraph
 
 from app.agents.browser_agent import browser_node, route_after_browser
+from app.agents.deep_agent import deep_node
 from app.agents.semantic_agent import semantic_node
 from app.agents.vision_agent import vision_node
 from app.graph.state import VFAState
 
 
 def build_graph() -> StateGraph:
-    """Construye el StateGraph del VFA con los nodos browser, vision y semantic."""
+    """Construye el StateGraph del VFA: browser -> deep -> (vision|semantic)."""
     graph = StateGraph(VFAState)
     graph.add_node("browser", browser_node)
+    graph.add_node("deep", deep_node)
     graph.add_node("vision", vision_node)
     graph.add_node("semantic", semantic_node)
     graph.add_edge(START, "browser")
+    graph.add_edge("browser", "deep")
     graph.add_conditional_edges(
-        "browser",
+        "deep",
         route_after_browser,
         {"vision": "vision", "semantic": "semantic"},
     )
