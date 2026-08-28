@@ -133,12 +133,88 @@ async def _reconnect_flow(browser, page, cookies, last_url):
     return browser, page
 
 
+async def _describe_screenshot_with_llm(screenshot_path: str) -> Dict[str, Any]:
+    """Describe un screenshot con un LLM multimodal (análisis descriptivo puro).
+
+    Degradación elegante: sin API key configurada, o si la llamada al LLM o el
+    parseo fallan, retorna status "first_capture" con description vacía y reason.
+
+    Args:
+        screenshot_path: ruta absoluta del screenshot capturado.
+
+    Returns:
+        Dict con status "first_capture" y, en caso de éxito, la clave
+        description (str) con la descripción visual.
+    """
+    provider = config.get_vision_provider()
+    api_key = config.get_vision_api_key(provider)
+    if not api_key:
+        return {
+            "status": "first_capture",
+            "description": "",
+            "reason": "No hay API key configurada para el proveedor de vision.",
+        }
+
+    try:
+        with open(screenshot_path, "rb") as f:
+            b64 = base64.b64encode(f.read()).decode()
+
+        prompt = (
+            "Describe esta captura de pantalla de una página web en detalle: "
+            "estructura visual, secciones, elementos destacados, colores y "
+            "posibles problemas de layout. Responde EXCLUSIVAMENTE con un JSON "
+            'estricto con la clave "description" (string). '
+            "No añadas texto fuera del JSON."
+        )
+
+        message = HumanMessage(
+            content=[
+                {"type": "text", "text": prompt},
+                {
+                    "type": "image_url",
+                    "image_url": {"url": f"data:image/png;base64,{b64}"},
+                },
+            ]
+        )
+
+        llm = get_vision_llm()
+        resp = await llm.ainvoke([message])
+        text = resp.content
+        if isinstance(text, list):
+            # Compatibilidad multi-proveedor: algunos devuelven bloques de contenido.
+            text = "".join(
+                part.get("text", "") for part in text if isinstance(part, dict)
+            )
+
+        text = text.strip()
+        if text.startswith("```"):
+            text = text.strip("`")
+            if text.startswith("json"):
+                text = text[4:]
+        try:
+            data = json.loads(text)
+        except json.JSONDecodeError:
+            return {
+                "status": "first_capture",
+                "description": "",
+                "reason": "Respuesta del LLM no fue JSON válido.",
+            }
+
+        return {
+            "status": "first_capture",
+            "description": data.get("description", ""),
+        }
+    except Exception as e:
+        return {"status": "first_capture", "description": "", "reason": str(e)}
+
+
 async def qa_audit_url(url: str, expected_screenshot_path: Optional[str] = None) -> Dict[str, Any]:
     """Audita una URL: navega, captura errores de consola/red y toma un screenshot.
 
-    Usa NAVIGATION_WAIT_UNTIL y NAVIGATION_TIMEOUT_MS para la navegación. Si se
-    proporciona expected_screenshot_path existente, añade un análisis visual
-    multimodal (vision_analysis).
+    Usa NAVIGATION_WAIT_UNTIL y NAVIGATION_TIMEOUT_MS para la navegación. Sin
+    expected_screenshot_path ejecuta análisis visual descriptivo puro
+    (vision_analysis con status "first_capture"); con una imagen esperada
+    existente, añade análisis visual comparativo multimodal.
 
     Args:
         url: URL absoluta a auditar.
@@ -162,10 +238,7 @@ async def qa_audit_url(url: str, expected_screenshot_path: Optional[str] = None)
         screenshot_path = os.path.abspath(AUDIT_SCREENSHOT_FILENAME)
 
         if expected_screenshot_path is None:
-            vision_analysis = {
-                "status": "skipped",
-                "reason": "expected_screenshot_path no proporcionado",
-            }
+            vision_analysis = await _describe_screenshot_with_llm(screenshot_path)
         elif not os.path.exists(expected_screenshot_path):
             vision_analysis = {
                 "status": "skipped",
