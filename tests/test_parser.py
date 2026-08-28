@@ -27,9 +27,13 @@ class FakeParserLocator:
         self._page.actions.append(f"fill:{self._name}")
 
     async def click(self, timeout=None):
+        if self._count == 0:
+            raise Exception("no element found")
         self._page.actions.append(f"click:{self._name}")
 
     async def dblclick(self, timeout=None):
+        if self._count == 0:
+            raise Exception("no element found")
         self._page.actions.append(f"dblclick:{self._name}")
 
     async def hover(self, timeout=None):
@@ -117,11 +121,44 @@ def test_parse_step_ingles():
     assert parser.parse_step("write standard_user in the username field") == {
         "action": "escribir",
         "texto": "standard_user",
-        "campo": "the username field",
+        "campo": "username field",  # "the" ahora se consume
     }
     assert parser.parse_step("click on the shopping cart icon") == {
         "action": "clic",
         "texto": "the shopping cart icon",
+    }
+
+
+def test_parse_step_escribir_comillas_y_articulos():
+    # Comillas simples: se eliminan del texto.
+    assert parser.parse_step("escribir 'inteligencia artificial' en el campo de busqueda") == {
+        "action": "escribir",
+        "texto": "inteligencia artificial",
+        "campo": "campo de busqueda",
+    }
+    # Comillas dobles.
+    assert parser.parse_step('escribir "hola mundo" en la caja') == {
+        "action": "escribir",
+        "texto": "hola mundo",
+        "campo": "caja",
+    }
+    # Inglés con artículo y comillas.
+    assert parser.parse_step("write 'hello world' in the search field") == {
+        "action": "escribir",
+        "texto": "hello world",
+        "campo": "search field",
+    }
+    # Texto citado que contiene el separador "en" (no corta dentro de las comillas).
+    assert parser.parse_step("escribir 'hola en casa' en el campo") == {
+        "action": "escribir",
+        "texto": "hola en casa",
+        "campo": "campo",
+    }
+    # Artículo español consumido antes del campo.
+    assert parser.parse_step("escribir user en el campo username") == {
+        "action": "escribir",
+        "texto": "user",
+        "campo": "campo username",
     }
 
 
@@ -196,3 +233,15 @@ def test_execute_step_hover():
     resultados = asyncio.run(qa_mod._execute_step(page, "hover sobre Products"))
     assert resultados["status"] == "ok"
     assert "hover:text:products" in page.actions
+
+
+def test_click_via_text_fallback_primer_match():
+    page = FakeParserPage({"text:english": 2})  # "English" no es único
+    assert asyncio.run(qa_mod._click_via_text(page, "english"))
+    assert "click:text:english" in page.actions
+
+
+def test_click_objetivo_rol_directo():
+    page = FakeParserPage({"role:link:english": 1})  # sin match por texto
+    assert asyncio.run(qa_mod._click_objetivo(page, "english"))
+    assert "click:role:link:english" in page.actions

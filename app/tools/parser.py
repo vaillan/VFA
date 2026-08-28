@@ -13,7 +13,11 @@ from typing import List, Optional
 # reducido y multilingüe; la resolución del objetivo NO depende de diccionarios.
 RE_CLIC = re.compile(r"(?:clic|click|pulsar|tap|hacer clic|hacer click)\s+(?:en|on|in)?\s*(.+)")
 RE_ESCRIBIR = re.compile(
-    r"(?:escribir|write|type|enter|fill|llenar|rellenar|introducir)\s+(.+?)\s+(?:en|in|into|at)\s+(.+)$"
+    r"(?:escribir|write|type|enter|fill|llenar|rellenar|introducir)\s+"
+    r"(?:\"([^\"]+)\"|'([^']+)'|(.+?))\s+"
+    r"(?:en|in|into|at)\s+"
+    r"(?:el|la|los|las|the|a|an)?\s*"
+    r"(.+)$"
 )
 RE_ESPERAR = re.compile(r"esperar\s+(\d+)")
 RE_HOVER = re.compile(r"(?:hover|pasar|mouseover|encima)\s+(?:sobre|on|over|de)?\s*(.+)")
@@ -215,10 +219,11 @@ def parse_step(paso: str) -> Optional[dict]:
     # 15. Escribir.
     match_escribir = RE_ESCRIBIR.match(paso_lower)
     if match_escribir:
+        texto = next(g for g in match_escribir.groups()[:3] if g is not None)
         return {
             "action": "escribir",
-            "texto": match_escribir.group(1).strip(),
-            "campo": match_escribir.group(2).strip(),
+            "texto": texto.strip(),
+            "campo": match_escribir.group(4).strip(),
         }
 
     # 16. Hover + clic.

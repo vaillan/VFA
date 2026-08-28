@@ -63,6 +63,16 @@ import app.tools.parser as parser
         ),
         # 17. Esperar segundos.
         ("esperar 3", {"action": "esperar", "segundos": 3}),
+        # 18. Escribir con comillas simples y artículo.
+        (
+            "escribir 'hola mundo' en el campo",
+            {"action": "escribir", "texto": "hola mundo", "campo": "campo"},
+        ),
+        # 19. Escribir en inglés con artículo.
+        (
+            "write user in the username field",
+            {"action": "escribir", "texto": "user", "campo": "username field"},
+        ),
     ],
 )
 def test_parse_step_17_acciones(paso: str, esperado: dict) -> None:

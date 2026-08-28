@@ -278,7 +278,11 @@ async def _fill_campo(page, campo, texto) -> bool:
 
 
 async def _click_via_text(page, texto, method: str = "click") -> bool:
-    """Hace clic en un elemento localizado por su texto visible."""
+    """Hace clic en un elemento localizado por su texto visible.
+
+    Si el texto no es único (p.ej. "English" en Wikipedia), hace clic en el
+    primer match en lugar de descartar la resolución.
+    """
     getter = getattr(page, "get_by_text", None)
     if getter is None:
         return False
@@ -286,11 +290,15 @@ async def _click_via_text(page, texto, method: str = "click") -> bool:
         loc = getter(texto, exact=False)
     except TypeError:
         loc = getter(texto)
-    if not await _is_unique(loc):
-        return False
     first = getattr(loc, "first", loc)
+    if not await _is_unique(loc):
+        try:
+            await getattr(first, method)(timeout=STEP_TIMEOUT_MS)
+            return True
+        except Exception:
+            return False
     try:
-        await getattr(first, method)(timeout=STEP_TIMEOUT_MS)
+        await getattr(loc, method)(timeout=STEP_TIMEOUT_MS)
         return True
     except Exception:
         return False
@@ -348,8 +356,11 @@ async def _click_via_class(page, token, method: str = "click") -> bool:
 
 
 async def _click_objetivo(page, texto) -> bool:
-    """Resuelve el objetivo de un clic por texto, candidatos, atributos y clases."""
+    """Resuelve el objetivo de un clic por texto, rol directo, candidatos, atributos y clases."""
     if await _click_via_text(page, texto):
+        return True
+    # Nivel intermedio: rol link/button con el texto completo (sin candidatos).
+    if await _click_via_role(page, texto):
         return True
     for candidate in parser.generate_candidates(texto):
         if await _click_via_role(page, candidate):
