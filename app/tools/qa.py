@@ -5,12 +5,18 @@ circular con server_mcp.py (que crea la instancia FastMCP). El registro se
 realiza en server_mcp.py mediante mcp.tool()(func).
 """
 
+import base64
+import json
 import os
 import re
 from typing import Any, Dict, List, Optional
 
+from langchain_core.messages import HumanMessage
+
+from app import config
 from app.browser import _close_browser, _connect_browser, _is_session_dead, _new_page
 from app.capture import _attach_console_capture, _capture_network_errors
+from app.llm import get_vision_llm
 from app.semantic import _resolve_semantic_step
 from app.session_pool import get_current_session_id, pool
 from app.tools import parser
@@ -203,6 +209,17 @@ async def _is_unique(loc) -> bool:
         return True
 
 
+async def _scroll_into_view(loc) -> None:
+    """Desplaza el elemento al viewport antes de interactuar (evita errores de viewport)."""
+    scroll = getattr(loc, "scroll_into_view_if_needed", None)
+    if scroll is None:
+        return
+    try:
+        await scroll(timeout=STEP_TIMEOUT_MS)
+    except Exception:
+        pass
+
+
 async def _fill_via(page, getter_name, candidate, texto, partial) -> bool:
     """Rellena un campo mediante un getter de nombre si resuelve de forma única."""
     getter = getattr(page, getter_name, None)
@@ -327,11 +344,13 @@ async def _click_via_text(page, texto, method: str = "click") -> bool:
     first = getattr(loc, "first", loc)
     if not await _is_unique(loc):
         try:
+            await _scroll_into_view(first)
             await getattr(first, method)(timeout=STEP_TIMEOUT_MS)
             return True
         except Exception:
             return False
     try:
+        await _scroll_into_view(loc)
         await getattr(loc, method)(timeout=STEP_TIMEOUT_MS)
         return True
     except Exception:
@@ -351,6 +370,7 @@ async def _click_via_role(page, candidate, method: str = "click") -> bool:
         if not await _is_unique(loc):
             continue
         try:
+            await _scroll_into_view(loc)
             await getattr(loc, method)(timeout=STEP_TIMEOUT_MS)
             return True
         except Exception:
@@ -368,6 +388,7 @@ async def _click_via_attr(page, attr, candidate, partial, method: str = "click")
     if not await _is_unique(loc):
         return False
     try:
+        await _scroll_into_view(loc)
         await getattr(loc, method)(timeout=STEP_TIMEOUT_MS)
         return True
     except Exception:
@@ -383,6 +404,7 @@ async def _click_via_class(page, token, method: str = "click") -> bool:
     if not await _is_unique(loc):
         return False
     try:
+        await _scroll_into_view(loc)
         await getattr(loc, method)(timeout=STEP_TIMEOUT_MS)
         return True
     except Exception:
@@ -402,6 +424,7 @@ async def _click_via_input_valor(page, candidate: str, method: str = "click") ->
         if not await _is_unique(loc):
             continue
         try:
+            await _scroll_into_view(loc)
             await getattr(loc, method)(timeout=STEP_TIMEOUT_MS)
             return True
         except Exception:
