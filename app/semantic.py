@@ -215,10 +215,32 @@ async def _resolve_semantic_step_deterministic(page, step: str) -> str:
         except Exception:
             return "unsupported"
 
+    # Capturar contenido / extraer texto.
+    if any(k in step_lower for k in ("capturar el título", "capturar el contenido", "capturar texto", "extraer texto", "capture the title", "capture the content", "extract text", "capturar el titulo")):
+        try:
+            if any(k in step_lower for k in ("título", "titulo", "title", "heading", "encabezado")):
+                for selector in ("h1", "h2", "h3"):
+                    loc = page.locator(selector)
+                    if await loc.count() > 0:
+                        await loc.first.inner_text()
+                        return "semantic"
+            await page.evaluate("document.body.innerText")
+            return "semantic"
+        except Exception:
+            return "unsupported"
+
     # Capturar pantalla.
     if any(k in step_lower for k in ("capturar", "capture", "screenshot", "tomar captura", "snapshot")):
         try:
             await page.screenshot(path="flow_semantic.png", full_page=True)
+            return "semantic"
+        except Exception:
+            return "unsupported"
+
+    # Ir al inicio.
+    if any(k in step_lower for k in ("ir al inicio", "go home", "ir al home", "scroll to top", "volver arriba", "go to top", "inicio", "home")):
+        try:
+            await page.evaluate("window.scrollTo(0, 0)")
             return "semantic"
         except Exception:
             return "unsupported"

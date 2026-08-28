@@ -89,6 +89,31 @@ RE_ATRAS = re.compile(
     r"(?:volver|back|go back|retroceder|atrás|regresar|return|previous)",
     re.IGNORECASE,
 )
+RE_IR_INICIO = re.compile(
+    r"(?:ir al inicio|go home|ir al home|scroll to top|volver arriba|go to top|inicio|home)",
+    re.IGNORECASE,
+)
+RE_LIMPIAR = re.compile(
+    r"(?:limpiar|clear|borrar|vaciar|reset)\s+"
+    r"(?:(?:el|la|the|a|an)\s+)?"
+    r"(?:(?:campo|field)\s+)?"
+    r"(.+)",
+    re.IGNORECASE,
+)
+RE_CAPTURAR_CONTENIDO = re.compile(
+    r"(?:capturar|capture|extraer|extract)\s+"
+    r"(?:el|la|the|a|an)?\s*"
+    r"(título|titulo|title|contenido|content|texto|text|heading|encabezado|h1|h2|h3|párrafo|parrafo|paragraph)"
+    r"(?:\s+(?:de|of|del|from)\s+.+)?",
+    re.IGNORECASE,
+)
+RE_CLIC_CUANTIFICADOR = re.compile(
+    r"(?:clic|click)\s+(?:en|on)\s+(?:el|la|the)\s+"
+    r"(primer|first|segundo|second|tercer|third)\s+"
+    r"(enlace|link|botón|boton|button|elemento|element)"
+    r"(?:\s+.+)?",
+    re.IGNORECASE,
+)
 
 # Stopwords multilingües mínimas: SOLO poda de último recurso, nunca mecanismo
 # principal. No incluye palabras de contenido (username, carrito, cart, etc.).
@@ -136,7 +161,7 @@ def parse_step(paso: str) -> Optional[dict]:
     Returns:
         dict con "action" y sus parámetros, o None si el paso no coincide con
         ningún patrón. El orden de dispatch evita colisiones entre verbos
-        ambiguos (esperar-numérico, subir-archivo, doble-clic).
+        ambiguos (esperar-numérico, subir-archivo, doble-clic, ir-inicio).
     """
     paso_lower = paso.lower()
 
@@ -160,16 +185,20 @@ def parse_step(paso: str) -> Optional[dict]:
     if match_navegar:
         return {"action": "navegar", "url": match_navegar.group(1).strip()}
 
-    # 5. Retroceder en el historial.
+    # 5. Ir al inicio (antes que atras: "volver arriba" empieza con "volver").
+    if RE_IR_INICIO.match(paso_lower):
+        return {"action": "ir_inicio"}
+
+    # 6. Retroceder en el historial.
     if RE_ATRAS.match(paso_lower):
         return {"action": "atras"}
 
-    # 6. Cerrar modal/cookie.
+    # 7. Cerrar modal/cookie.
     match_cerrar = RE_CERRAR.match(paso_lower)
     if match_cerrar:
         return {"action": "cerrar", "texto": (match_cerrar.group(1) or "").strip()}
 
-    # 7. Arrastrar y soltar.
+    # 8. Arrastrar y soltar.
     match_arrastrar = RE_ARRASTRAR.match(paso_lower)
     if match_arrastrar:
         return {
@@ -178,7 +207,7 @@ def parse_step(paso: str) -> Optional[dict]:
             "destino": match_arrastrar.group(2).strip(),
         }
 
-    # 8. Seleccionar opción en un dropdown.
+    # 9. Seleccionar opción en un dropdown.
     match_seleccionar = RE_SELECCIONAR.match(paso_lower)
     if match_seleccionar:
         return {
@@ -187,36 +216,62 @@ def parse_step(paso: str) -> Optional[dict]:
             "dropdown": match_seleccionar.group(2).strip(),
         }
 
-    # 9. Presionar tecla.
+    # 10. Presionar tecla.
     match_tecla = RE_PRESIONAR_TECLA.match(paso_lower)
     if match_tecla:
         return {"action": "presionar_tecla", "tecla": match_tecla.group(1).strip()}
 
-    # 10. Verificar/asegurar.
+    # 11. Verificar/asegurar.
     match_verificar = RE_VERIFICAR.match(paso_lower)
     if match_verificar:
         return {"action": "verificar", "texto": match_verificar.group(1).strip()}
 
-    # 11. Esperar elemento (después de esperar-numérico).
+    # 12. Esperar elemento (después de esperar-numérico).
     match_esperar_el = RE_ESPERAR_ELEMENTO.match(paso_lower)
     if match_esperar_el:
         return {"action": "esperar_elemento", "texto": match_esperar_el.group(1).strip()}
 
-    # 12. Capturar pantalla.
+    # 13. Capturar contenido (antes que capturar pantalla).
+    match_capturar_contenido = RE_CAPTURAR_CONTENIDO.match(paso_lower)
+    if match_capturar_contenido:
+        return {
+            "action": "capturar_contenido",
+            "tipo": match_capturar_contenido.group(1).strip(),
+        }
+
+    # 14. Capturar pantalla.
     if RE_CAPTURAR.match(paso_lower):
         return {"action": "capturar"}
 
-    # 13. Scroll.
+    # 15. Scroll.
     match_scroll = RE_SCROLL.match(paso_lower)
     if match_scroll:
         return {"action": "scroll", "texto": (match_scroll.group(1) or "").strip()}
 
-    # 14. Clic.
+    # 16. Limpiar campo (antes que clic).
+    match_limpiar = RE_LIMPIAR.match(paso_lower)
+    if match_limpiar:
+        return {"action": "limpiar", "campo": match_limpiar.group(1).strip()}
+
+    # 17. Clic cuantificador (antes que clic genérico).
+    match_clic_cuantificador = RE_CLIC_CUANTIFICADOR.match(paso_lower)
+    if match_clic_cuantificador:
+        return {
+            "action": "clic_cuantificador",
+            "ordinal": {
+                "primer": 1, "first": 1,
+                "segundo": 2, "second": 2,
+                "tercer": 3, "third": 3,
+            }[match_clic_cuantificador.group(1)],
+            "tipo": match_clic_cuantificador.group(2).strip(),
+        }
+
+    # 18. Clic.
     match_clic = RE_CLIC.match(paso_lower)
     if match_clic:
         return {"action": "clic", "texto": match_clic.group(1).strip()}
 
-    # 15. Escribir.
+    # 19. Escribir.
     match_escribir = RE_ESCRIBIR.match(paso_lower)
     if match_escribir:
         texto = next(g for g in match_escribir.groups()[:3] if g is not None)
@@ -226,7 +281,7 @@ def parse_step(paso: str) -> Optional[dict]:
             "campo": match_escribir.group(4).strip(),
         }
 
-    # 16. Hover + clic.
+    # 20. Hover + clic.
     match_hover_clic = RE_HOVER_CLIC.match(paso_lower)
     if match_hover_clic:
         return {
@@ -235,7 +290,7 @@ def parse_step(paso: str) -> Optional[dict]:
             "clic_texto": match_hover_clic.group(2).strip(),
         }
 
-    # 17. Hover.
+    # 21. Hover.
     match_hover = RE_HOVER.match(paso_lower)
     if match_hover:
         return {"action": "hover", "texto": match_hover.group(1).strip()}

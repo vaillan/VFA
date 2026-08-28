@@ -356,23 +356,40 @@ async def _click_via_class(page, token, method: str = "click") -> bool:
 
 
 async def _click_objetivo(page, texto) -> bool:
-    """Resuelve el objetivo de un clic por texto, rol directo, candidatos, atributos y clases."""
-    if await _click_via_text(page, texto):
-        return True
-    # Nivel intermedio: rol link/button con el texto completo (sin candidatos).
-    if await _click_via_role(page, texto):
-        return True
-    for candidate in parser.generate_candidates(texto):
-        if await _click_via_role(page, candidate):
+    """Resuelve el objetivo de un clic con espera activa, scroll y reintento (SPAs dinámicos)."""
+    for intento in range(2):
+        # Espera activa corta: el SPA puede tardar en renderizar el nodo.
+        try:
+            getter = getattr(page, "get_by_text", None)
+            if getter is not None:
+                await getter(texto, exact=False).first.wait_for(
+                    state="visible", timeout=3000
+                )
+        except Exception:
+            pass  # Si no aparece, se intenta resolver igualmente.
+        # Flujo de resolución existente: texto, rol, candidatos, atributos y clases.
+        if await _click_via_text(page, texto):
             return True
-    for partial in (False, True):
+        if await _click_via_role(page, texto):
+            return True
         for candidate in parser.generate_candidates(texto):
-            for attr in ("aria-label", "title", "data-test", "data-testid", "id"):
-                if await _click_via_attr(page, attr, candidate, partial):
-                    return True
-    for token in parser.raw_tokens(texto):
-        if await _click_via_class(page, token):
-            return True
+            if await _click_via_role(page, candidate):
+                return True
+        for partial in (False, True):
+            for candidate in parser.generate_candidates(texto):
+                for attr in ("aria-label", "title", "data-test", "data-testid", "id"):
+                    if await _click_via_attr(page, attr, candidate, partial):
+                        return True
+        for token in parser.raw_tokens(texto):
+            if await _click_via_class(page, token):
+                return True
+        # Primer intento fallido: scroll y reintento (elemento fuera de viewport o aún renderizándose).
+        if intento == 0:
+            try:
+                await page.evaluate("window.scrollBy(0, 500)")
+                await page.wait_for_timeout(500)
+            except Exception:
+                pass
     return False
 
 
@@ -650,6 +667,43 @@ async def _navegar_atras(page) -> bool:
         return False
 
 
+async def _capturar_contenido(page, tipo: str) -> Optional[str]:
+    """Extrae el texto de un encabezado (h1/h2/h3) o del cuerpo de la página."""
+    try:
+        if tipo in ("título", "titulo", "title", "heading", "encabezado", "h1", "h2", "h3"):
+            for selector in ("h1", "h2", "h3"):
+                loc = page.locator(selector)
+                if await loc.count() > 0:
+                    return (await loc.first.inner_text()).strip()
+        return (await page.evaluate("document.body.innerText")).strip()
+    except Exception:
+        return None
+
+
+async def _clic_cuantificador(page, ordinal: int, tipo: str) -> bool:
+    """Hace clic en el elemento ordinal (1-based) de un tipo dado."""
+    selectores = {
+        "enlace": "a, [role=link]",
+        "link": "a, [role=link]",
+        "botón": "button, [role=button]",
+        "boton": "button, [role=button]",
+        "button": "button, [role=button]",
+        "elemento": "a, button, [role=link], [role=button]",
+        "element": "a, button, [role=link], [role=button]",
+    }
+    try:
+        loc = page.locator(selectores.get(tipo, "a, button, [role=link], [role=button]"))
+        if await loc.count() < ordinal:
+            return False
+        target = loc.nth(ordinal - 1)
+        if not await target.is_visible():
+            await target.scroll_into_view_if_needed(timeout=STEP_TIMEOUT_MS)
+        await target.click(timeout=STEP_TIMEOUT_MS)
+        return True
+    except Exception:
+        return False
+
+
 async def _execute_step(page, paso: str) -> Dict[str, Any]:
     """Ejecuta un único paso del flujo y retorna su entrada de log.
 
@@ -658,6 +712,7 @@ async def _execute_step(page, paso: str) -> Dict[str, Any]:
     """
     strategy = "regex"
     matched = False
+    resultado: Optional[str] = None
     parsed = parser.parse_step(paso)
     if parsed is not None:
         if parsed["action"] == "clic":
@@ -713,6 +768,20 @@ async def _execute_step(page, paso: str) -> Dict[str, Any]:
         elif parsed["action"] == "atras":
             if await _navegar_atras(page):
                 matched = True
+        elif parsed["action"] == "limpiar":
+            if await _fill_campo(page, parsed["campo"], ""):
+                matched = True
+        elif parsed["action"] == "capturar_contenido":
+            texto = await _capturar_contenido(page, parsed["tipo"])
+            if texto is not None:
+                matched = True
+                resultado = texto
+        elif parsed["action"] == "clic_cuantificador":
+            if await _clic_cuantificador(page, parsed["ordinal"], parsed["tipo"]):
+                matched = True
+        elif parsed["action"] == "ir_inicio":
+            if await _scroll_objetivo(page, "top"):
+                matched = True
 
     if not matched:
         strategy = await _resolve_semantic_step(page, paso)
@@ -723,7 +792,10 @@ async def _execute_step(page, paso: str) -> Dict[str, Any]:
                 "strategy": strategy,
                 "error": "Paso no soportado por el parser regex ni por el fallback semántico.",
             }
-    return {"step": paso, "status": "ok", "strategy": strategy}
+    entry: Dict[str, Any] = {"step": paso, "status": "ok", "strategy": strategy}
+    if resultado is not None:
+        entry["resultado"] = resultado
+    return entry
 
 
 async def qa_execute_user_flow(url: str, steps: List[str]) -> Dict[str, Any]:

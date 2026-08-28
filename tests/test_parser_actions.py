@@ -83,3 +83,62 @@ def test_parse_step_17_acciones(paso: str, esperado: dict) -> None:
 def test_parse_step_caso_invalido() -> None:
     """Un paso sin verbo de acción reconocido no coincide con ningún patrón."""
     assert parser.parse_step("texto sin accion") is None
+
+
+@pytest.mark.parametrize(
+    "paso,esperado",
+    [
+        # 20. Limpiar campo.
+        ("limpiar campo username", {"action": "limpiar", "campo": "username"}),
+        ("clear the field email", {"action": "limpiar", "campo": "email"}),
+        ("borrar la caja de busqueda", {"action": "limpiar", "campo": "caja de busqueda"}),
+        ("limpiar username", {"action": "limpiar", "campo": "username"}),
+        # 21. Capturar contenido.
+        ("capturar el título principal", {"action": "capturar_contenido", "tipo": "título"}),
+        (
+            "capturar el contenido de la sección",
+            {"action": "capturar_contenido", "tipo": "contenido"},
+        ),
+        ("extraer texto", {"action": "capturar_contenido", "tipo": "texto"}),
+        ("capture the title", {"action": "capturar_contenido", "tipo": "title"}),
+        # 22. Clic cuantificador.
+        (
+            "clic en el primer enlace",
+            {"action": "clic_cuantificador", "ordinal": 1, "tipo": "enlace"},
+        ),
+        (
+            "click on the second button",
+            {"action": "clic_cuantificador", "ordinal": 2, "tipo": "button"},
+        ),
+        (
+            "clic en el tercer elemento",
+            {"action": "clic_cuantificador", "ordinal": 3, "tipo": "elemento"},
+        ),
+        # 23. Ir al inicio.
+        ("ir al inicio", {"action": "ir_inicio"}),
+        ("go home", {"action": "ir_inicio"}),
+        ("volver arriba", {"action": "ir_inicio"}),
+        ("scroll to top", {"action": "ir_inicio"}),
+    ],
+)
+def test_parse_step_nuevas_acciones(paso: str, esperado: dict) -> None:
+    """Las 4 acciones nuevas (limpiar, capturar_contenido, clic_cuantificador, ir_inicio) se despachan correctamente."""
+    assert parser.parse_step(paso) == esperado
+
+
+@pytest.mark.parametrize(
+    "paso,esperado",
+    [
+        # "volver" no debe colisionar con ir_inicio (que exige "volver arriba").
+        ("volver", {"action": "atras"}),
+        # "capturar screenshot" no es capturar_contenido (screenshot no es un tipo).
+        ("capturar screenshot", {"action": "capturar"}),
+        # "tomar captura" no es capturar_contenido (tomar no es verbo de captura de contenido).
+        ("tomar captura", {"action": "capturar"}),
+        # "clic en inicio" no es clic_cuantificador (inicio no es ordinal).
+        ("clic en inicio", {"action": "clic", "texto": "inicio"}),
+    ],
+)
+def test_parse_step_nuevas_acciones_no_colision(paso: str, esperado: dict) -> None:
+    """El orden de dispatch evita colisiones entre las regex nuevas y las preexistentes."""
+    assert parser.parse_step(paso) == esperado

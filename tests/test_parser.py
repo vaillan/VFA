@@ -14,14 +14,21 @@ import app.tools.qa as qa_mod
 class FakeParserLocator:
     """Fake de un locator que registra la acción ejecutada y su unicidad."""
 
-    def __init__(self, page, name, count=1):
+    def __init__(self, page, name, count=1, inner_text=""):
         self._page = page
         self._name = name
         self._count = count
+        self._inner_text = inner_text
         self.first = self
 
     async def count(self) -> int:
         return self._count
+
+    async def inner_text(self) -> str:
+        return self._inner_text
+
+    def nth(self, index: int) -> "FakeParserLocator":
+        return self
 
     async def fill(self, texto, timeout=None):
         self._page.actions.append(f"fill:{self._name}")
@@ -62,12 +69,13 @@ class FakeParserLocator:
 class FakeParserPage:
     """Fake de una Page con getters y locator que resuelven por selector."""
 
-    def __init__(self, matches):
+    def __init__(self, matches, inner_text=""):
         self.matches = matches
+        self.inner_text = inner_text
         self.actions = []
 
     def _loc(self, name):
-        return FakeParserLocator(self, name, self.matches.get(name, 0))
+        return FakeParserLocator(self, name, self.matches.get(name, 0), self.inner_text)
 
     def get_by_text(self, texto, exact=False):
         return self._loc(f"text:{texto}")
@@ -86,6 +94,10 @@ class FakeParserPage:
 
     async def wait_for_timeout(self, ms):
         self.actions.append(f"wait:{ms}")
+
+    async def evaluate(self, expr: str) -> str:
+        self.actions.append(f"evaluate:{expr}")
+        return ""
 
 
 def test_tokenize():
@@ -245,3 +257,38 @@ def test_click_objetivo_rol_directo():
     page = FakeParserPage({"role:link:english": 1})  # sin match por texto
     assert asyncio.run(qa_mod._click_objetivo(page, "english"))
     assert "click:role:link:english" in page.actions
+
+
+def test_click_objetivo_con_retry():
+    page = FakeParserPage({})
+    assert asyncio.run(qa_mod._click_objetivo(page, "objetivo inexistente")) is False
+    assert "evaluate:window.scrollBy(0, 500)" in page.actions
+    assert "wait:500" in page.actions
+
+
+def test_execute_step_limpiar():
+    page = FakeParserPage({"placeholder:username": 1})
+    resultados = asyncio.run(qa_mod._execute_step(page, "limpiar campo username"))
+    assert resultados["status"] == "ok"
+    assert "fill:placeholder:username" in page.actions
+
+
+def test_execute_step_capturar_contenido():
+    page = FakeParserPage({"h1": 1}, inner_text="Título principal")
+    resultados = asyncio.run(qa_mod._execute_step(page, "capturar el título principal"))
+    assert resultados["status"] == "ok"
+    assert resultados["resultado"] == "Título principal"
+
+
+def test_execute_step_ir_inicio():
+    page = FakeParserPage({})
+    resultados = asyncio.run(qa_mod._execute_step(page, "ir al inicio"))
+    assert resultados["status"] == "ok"
+    assert "evaluate:window.scrollTo(0, 0)" in page.actions
+
+
+def test_execute_step_clic_cuantificador():
+    page = FakeParserPage({"a, [role=link]": 2})
+    resultados = asyncio.run(qa_mod._execute_step(page, "clic en el primer enlace"))
+    assert resultados["status"] == "ok"
+    assert "click:a, [role=link]" in page.actions
