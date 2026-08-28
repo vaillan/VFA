@@ -129,6 +129,27 @@ async def _resolve_semantic_step_deterministic(page, step: str) -> str:
     """
     step_lower = step.lower()
 
+    # Import diferido: evita el ciclo app.semantic -> app.tools -> app.tools.qa -> app.semantic.
+    from app.tools.parser import CLIC_CUANTIFICADOR_SELECTORES, ORDINALES
+
+    # Clic cuantificador: "clic en el primer resultado", "click on the second link".
+    match_cuant = re.match(
+        r"(?:clic|click)\s+(?:en|on)\s+(?:el|la|the)\s+"
+        r"(primer|first|segundo|second|tercer|third)\s+"
+        r"(resultado|result|enlace|link|botón|boton|button|elemento|element)",
+        step_lower,
+    )
+    if match_cuant:
+        ordinal = ORDINALES[match_cuant.group(1)]
+        tipo = match_cuant.group(2)
+        selector = CLIC_CUANTIFICADOR_SELECTORES.get(tipo)
+        if selector:
+            loc = page.locator(selector)
+            if await loc.count() >= ordinal:
+                await loc.nth(ordinal - 1).click()
+                return "semantic"
+        return "unsupported"
+
     # Acciones de clic / pulsación.
     if any(k in step_lower for k in ("clic", "click", "enviar", "botón", "boton", "pulsar", "presionar")):
         texto = step_lower
@@ -158,6 +179,8 @@ async def _resolve_semantic_step_deterministic(page, step: str) -> str:
             return "unsupported"
         texto = match.group(1).strip().strip("'\"")
         campo = match.group(2).strip().strip("'\"")
+        # Normaliza el campo eliminando artículos iniciales ("el campo nombre" -> "campo nombre").
+        campo = re.sub(r"^(?:el|la|los|las|the|un|una|unos|unas)\s+", "", campo)
         if not texto or not campo:
             return "unsupported"
         try:
