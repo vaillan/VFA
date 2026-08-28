@@ -67,3 +67,12 @@ screenshots/
 
 # ===== Node =====
 node_modules/
+
+# ===== Imagenes de prueba / QA =====
+*screenshot*.*
+*audit*.png
+*test*.png
+*test*.jpg
+*test*.jpeg
+*qa*.png
+*qa*.jpg
