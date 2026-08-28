@@ -29,6 +29,31 @@ class FakeParserLocator:
     async def click(self, timeout=None):
         self._page.actions.append(f"click:{self._name}")
 
+    async def dblclick(self, timeout=None):
+        self._page.actions.append(f"dblclick:{self._name}")
+
+    async def hover(self, timeout=None):
+        self._page.actions.append(f"hover:{self._name}")
+
+    async def is_visible(self) -> bool:
+        self._page.actions.append(f"visible:{self._name}")
+        return self._count > 0
+
+    async def wait_for(self, state=None, timeout=None):
+        self._page.actions.append(f"wait_for:{self._name}")
+
+    async def scroll_into_view_if_needed(self, timeout=None):
+        self._page.actions.append(f"scroll:{self._name}")
+
+    async def select_option(self, label=None, timeout=None):
+        self._page.actions.append(f"select:{self._name}")
+
+    async def set_input_files(self, paths, timeout=None):
+        self._page.actions.append(f"upload:{self._name}")
+
+    async def drag_to(self, target, timeout=None):
+        self._page.actions.append(f"drag:{self._name}->{target._name}")
+
 
 class FakeParserPage:
     """Fake de una Page con getters y locator que resuelven por selector."""
@@ -138,3 +163,36 @@ def test_execute_step_regresion():
     assert "fill:label:username" in page.actions
     assert "click:text:add to cart" in page.actions
     assert "wait:2000" in page.actions
+
+
+def test_parse_step_hover():
+    assert parser.parse_step("hover sobre Products") == {
+        "action": "hover",
+        "texto": "products",
+    }
+    assert parser.parse_step("hover Products") == {
+        "action": "hover",
+        "texto": "products",
+    }
+    assert parser.parse_step("pasar mouse sobre Products")["action"] == "hover"
+
+
+def test_parse_step_hover_clic():
+    assert parser.parse_step("hover sobre Products y luego clic en LangSmith") == {
+        "action": "hover_clic",
+        "hover_texto": "products",
+        "clic_texto": "langsmith",
+    }
+
+
+def test_hover_objetivo():
+    page = FakeParserPage({"text:products": 1})
+    assert asyncio.run(qa_mod._hover_objetivo(page, "products"))
+    assert "hover:text:products" in page.actions
+
+
+def test_execute_step_hover():
+    page = FakeParserPage({"text:products": 1})
+    resultados = asyncio.run(qa_mod._execute_step(page, "hover sobre Products"))
+    assert resultados["status"] == "ok"
+    assert "hover:text:products" in page.actions

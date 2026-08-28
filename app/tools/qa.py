@@ -24,6 +24,38 @@ MAX_RECONNECTS = 3
 NAVIGATION_WAIT_UNTIL = "networkidle"
 AUDIT_SCREENSHOT_FILENAME = "audit_screenshot.png"
 
+# Mapeo de nombres de teclas comunes a los códigos de Playwright.
+_KEY_MAP: dict[str, str] = {
+    "enter": "Enter",
+    "tab": "Tab",
+    "escape": "Escape",
+    "esc": "Escape",
+    "backspace": "Backspace",
+    "delete": "Delete",
+    "del": "Delete",
+    "arrowup": "ArrowUp",
+    "arrowdown": "ArrowDown",
+    "arrowleft": "ArrowLeft",
+    "arrowright": "ArrowRight",
+    "space": "Space",
+    "home": "Home",
+    "end": "End",
+    "pageup": "PageUp",
+    "pagedown": "PageDown",
+    "f1": "F1",
+    "f2": "F2",
+    "f3": "F3",
+    "f4": "F4",
+    "f5": "F5",
+    "f6": "F6",
+    "f7": "F7",
+    "f8": "F8",
+    "f9": "F9",
+    "f10": "F10",
+    "f11": "F11",
+    "f12": "F12",
+}
+
 
 async def _open_page():
     """Conecta al navegador remoto y crea una página nueva.
@@ -245,7 +277,7 @@ async def _fill_campo(page, campo, texto) -> bool:
     return False
 
 
-async def _click_via_text(page, texto) -> bool:
+async def _click_via_text(page, texto, method: str = "click") -> bool:
     """Hace clic en un elemento localizado por su texto visible."""
     getter = getattr(page, "get_by_text", None)
     if getter is None:
@@ -258,13 +290,13 @@ async def _click_via_text(page, texto) -> bool:
         return False
     first = getattr(loc, "first", loc)
     try:
-        await first.click(timeout=STEP_TIMEOUT_MS)
+        await getattr(first, method)(timeout=STEP_TIMEOUT_MS)
         return True
     except Exception:
         return False
 
 
-async def _click_via_role(page, candidate) -> bool:
+async def _click_via_role(page, candidate, method: str = "click") -> bool:
     """Hace clic en un elemento localizado por rol y nombre accesible."""
     getter = getattr(page, "get_by_role", None)
     if getter is None:
@@ -277,14 +309,14 @@ async def _click_via_role(page, candidate) -> bool:
         if not await _is_unique(loc):
             continue
         try:
-            await loc.click(timeout=STEP_TIMEOUT_MS)
+            await getattr(loc, method)(timeout=STEP_TIMEOUT_MS)
             return True
         except Exception:
             continue
     return False
 
 
-async def _click_via_attr(page, attr, candidate, partial) -> bool:
+async def _click_via_attr(page, attr, candidate, partial, method: str = "click") -> bool:
     """Hace clic en un elemento localizado por atributo CSS."""
     locator = getattr(page, "locator", None)
     if locator is None:
@@ -294,13 +326,13 @@ async def _click_via_attr(page, attr, candidate, partial) -> bool:
     if not await _is_unique(loc):
         return False
     try:
-        await loc.click(timeout=STEP_TIMEOUT_MS)
+        await getattr(loc, method)(timeout=STEP_TIMEOUT_MS)
         return True
     except Exception:
         return False
 
 
-async def _click_via_class(page, token) -> bool:
+async def _click_via_class(page, token, method: str = "click") -> bool:
     """Hace clic en un elemento localizado por fragmento de clase CSS."""
     locator = getattr(page, "locator", None)
     if locator is None:
@@ -309,7 +341,7 @@ async def _click_via_class(page, token) -> bool:
     if not await _is_unique(loc):
         return False
     try:
-        await loc.click(timeout=STEP_TIMEOUT_MS)
+        await getattr(loc, method)(timeout=STEP_TIMEOUT_MS)
         return True
     except Exception:
         return False
@@ -333,6 +365,280 @@ async def _click_objetivo(page, texto) -> bool:
     return False
 
 
+async def _hover_via_text(page, texto) -> bool:
+    """Hace hover sobre un elemento localizado por su texto visible."""
+    getter = getattr(page, "get_by_text", None)
+    if getter is None:
+        return False
+    try:
+        loc = getter(texto, exact=False)
+    except TypeError:
+        loc = getter(texto)
+    if not await _is_unique(loc):
+        return False
+    first = getattr(loc, "first", loc)
+    try:
+        await first.hover(timeout=STEP_TIMEOUT_MS)
+        return True
+    except Exception:
+        return False
+
+
+async def _hover_via_role(page, candidate) -> bool:
+    """Hace hover sobre un elemento localizado por rol y nombre accesible."""
+    getter = getattr(page, "get_by_role", None)
+    if getter is None:
+        return False
+    for role in ("link", "button", "img", "menuitem", "tab", "generic"):
+        try:
+            loc = getter(role, name=candidate, exact=False)
+        except TypeError:
+            loc = getter(role, name=candidate)
+        if not await _is_unique(loc):
+            continue
+        try:
+            await loc.hover(timeout=STEP_TIMEOUT_MS)
+            return True
+        except Exception:
+            continue
+    return False
+
+
+async def _hover_via_attr(page, attr, candidate, partial) -> bool:
+    """Hace hover sobre un elemento localizado por atributo CSS."""
+    locator = getattr(page, "locator", None)
+    if locator is None:
+        return False
+    selector = f'[{attr}="{candidate}" i]' if not partial else f'[{attr}*="{candidate}" i]'
+    loc = locator(selector)
+    if not await _is_unique(loc):
+        return False
+    try:
+        await loc.hover(timeout=STEP_TIMEOUT_MS)
+        return True
+    except Exception:
+        return False
+
+
+async def _hover_via_class(page, token) -> bool:
+    """Hace hover sobre un elemento localizado por fragmento de clase CSS."""
+    locator = getattr(page, "locator", None)
+    if locator is None:
+        return False
+    loc = locator(f'[class*="{token}"]')
+    if not await _is_unique(loc):
+        return False
+    try:
+        await loc.hover(timeout=STEP_TIMEOUT_MS)
+        return True
+    except Exception:
+        return False
+
+
+async def _hover_objetivo(page, texto) -> bool:
+    """Resuelve el objetivo de un hover por texto, candidatos, atributos y clases."""
+    if await _hover_via_text(page, texto):
+        return True
+    for candidate in parser.generate_candidates(texto):
+        if await _hover_via_role(page, candidate):
+            return True
+    for partial in (False, True):
+        for candidate in parser.generate_candidates(texto):
+            for attr in ("aria-label", "title", "data-test", "data-testid", "id"):
+                if await _hover_via_attr(page, attr, candidate, partial):
+                    return True
+    for token in parser.raw_tokens(texto):
+        if await _hover_via_class(page, token):
+            return True
+    return False
+
+
+async def _scroll_objetivo(page, texto) -> bool:
+    """Desplaza la página hacia arriba, abajo o hasta un elemento visible."""
+    try:
+        if texto in ("arriba", "up", "top", "inicio", "start"):
+            await page.evaluate("window.scrollTo(0, 0)")
+            return True
+        if texto in ("abajo", "down", "bottom", "fin", "end"):
+            await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+            return True
+        if texto:
+            getter = getattr(page, "get_by_text", None)
+            if getter is not None:
+                loc = getter(texto, exact=False)
+                if await _is_unique(loc):
+                    await loc.scroll_into_view_if_needed(timeout=STEP_TIMEOUT_MS)
+                    return True
+        await page.evaluate("window.scrollBy(0, 500)")
+        return True
+    except Exception:
+        return False
+
+
+async def _press_key(page, tecla) -> bool:
+    """Presiona una tecla del teclado sobre la página."""
+    try:
+        key = _KEY_MAP.get(tecla.strip().lower(), tecla.strip())
+        await page.keyboard.press(key)
+        return True
+    except Exception:
+        return False
+
+
+async def _seleccionar_opcion(page, opcion, dropdown) -> bool:
+    """Selecciona una opción de un dropdown localizado por atributos."""
+    locator = getattr(page, "locator", None)
+    if locator is not None:
+        for attr in ("aria-label", "name", "id", "title"):
+            for candidate in parser.generate_candidates(dropdown):
+                for partial in (False, True):
+                    selector = (
+                        f'[{attr}="{candidate}" i]'
+                        if not partial
+                        else f'[{attr}*="{candidate}" i]'
+                    )
+                    loc = locator(selector)
+                    if not await _is_unique(loc):
+                        continue
+                    try:
+                        await loc.select_option(label=opcion, timeout=STEP_TIMEOUT_MS)
+                        return True
+                    except Exception:
+                        continue
+    try:
+        if await _click_objetivo(page, dropdown) and await _click_objetivo(page, opcion):
+            return True
+    except Exception:
+        pass
+    return False
+
+
+async def _dblclick_objetivo(page, texto) -> bool:
+    """Hace doble clic sobre un objetivo resuelto por texto, rol, atributos o clase."""
+    if await _click_via_text(page, texto, method="dblclick"):
+        return True
+    for candidate in parser.generate_candidates(texto):
+        if await _click_via_role(page, candidate, method="dblclick"):
+            return True
+    for partial in (False, True):
+        for candidate in parser.generate_candidates(texto):
+            for attr in ("aria-label", "title", "data-test", "data-testid", "id"):
+                if await _click_via_attr(page, attr, candidate, partial, method="dblclick"):
+                    return True
+    for token in parser.raw_tokens(texto):
+        if await _click_via_class(page, token, method="dblclick"):
+            return True
+    return False
+
+
+async def _verificar_elemento(page, texto) -> bool:
+    """Verifica que un elemento con el texto dado sea visible."""
+    try:
+        getter = getattr(page, "get_by_text", None)
+        if getter is None:
+            return False
+        loc = getter(texto, exact=False)
+        return await loc.first.is_visible()
+    except Exception:
+        return False
+
+
+async def _esperar_elemento(page, texto) -> bool:
+    """Espera a que un elemento con el texto dado sea visible."""
+    try:
+        getter = getattr(page, "get_by_text", None)
+        if getter is None:
+            return False
+        loc = getter(texto, exact=False)
+        await loc.first.wait_for(state="visible", timeout=STEP_TIMEOUT_MS)
+        return True
+    except Exception:
+        return False
+
+
+async def _capturar_pantalla(page) -> bool:
+    """Captura un screenshot de página completa."""
+    try:
+        await page.screenshot(path="flow_screenshot.png", full_page=True)
+        return True
+    except Exception:
+        return False
+
+
+async def _navegar_a_url(page, url) -> bool:
+    """Navega a la URL indicada."""
+    try:
+        await _goto(page, url)
+        return True
+    except Exception:
+        return False
+
+
+async def _subir_archivo(page, archivo) -> bool:
+    """Sube un archivo a un input de tipo file."""
+    if not archivo:
+        return False
+    locator = getattr(page, "locator", None)
+    if locator is not None:
+        for attr in ("name", "id", "title"):
+            for candidate in parser.generate_candidates(archivo):
+                for partial in (False, True):
+                    selector = (
+                        f'[{attr}="{candidate}" i]'
+                        if not partial
+                        else f'[{attr}*="{candidate}" i]'
+                    )
+                    loc = locator(selector)
+                    if not await _is_unique(loc):
+                        continue
+                    try:
+                        await loc.set_input_files(archivo, timeout=STEP_TIMEOUT_MS)
+                        return True
+                    except Exception:
+                        continue
+    try:
+        loc = locator("input[type=file]")
+        if await _is_unique(loc):
+            await loc.set_input_files(archivo, timeout=STEP_TIMEOUT_MS)
+            return True
+    except Exception:
+        pass
+    return False
+
+
+async def _arrastrar(page, origen, destino) -> bool:
+    """Arrastra un elemento origen hasta un elemento destino."""
+    try:
+        getter = getattr(page, "get_by_text", None)
+        if getter is None:
+            return False
+        await getter(origen).first.drag_to(
+            getter(destino).first, timeout=STEP_TIMEOUT_MS
+        )
+        return True
+    except Exception:
+        return False
+
+
+async def _cerrar(page, texto) -> bool:
+    """Cierra un modal, popup o banner de cookies."""
+    if texto and await _click_objetivo(page, texto):
+        return True
+    for etiqueta in ("cerrar", "close", "aceptar", "accept", "ok", "x"):
+        if await _click_objetivo(page, etiqueta):
+            return True
+    return False
+
+
+async def _navegar_atras(page) -> bool:
+    """Retrocede a la página anterior del historial."""
+    try:
+        await page.go_back(wait_until=NAVIGATION_WAIT_UNTIL, timeout=NAVIGATION_TIMEOUT_MS)
+        return True
+    except Exception:
+        return False
+
+
 async def _execute_step(page, paso: str) -> Dict[str, Any]:
     """Ejecuta un único paso del flujo y retorna su entrada de log.
 
@@ -352,6 +658,50 @@ async def _execute_step(page, paso: str) -> Dict[str, Any]:
         elif parsed["action"] == "esperar":
             await page.wait_for_timeout(parsed["segundos"] * 1000)
             matched = True
+        elif parsed["action"] == "hover":
+            if await _hover_objetivo(page, parsed["texto"]):
+                matched = True
+        elif parsed["action"] == "hover_clic":
+            if await _hover_objetivo(page, parsed["hover_texto"]) and await _click_objetivo(
+                page, parsed["clic_texto"]
+            ):
+                matched = True
+        elif parsed["action"] == "scroll":
+            if await _scroll_objetivo(page, parsed["texto"]):
+                matched = True
+        elif parsed["action"] == "presionar_tecla":
+            if await _press_key(page, parsed["tecla"]):
+                matched = True
+        elif parsed["action"] == "seleccionar":
+            if await _seleccionar_opcion(page, parsed["opcion"], parsed["dropdown"]):
+                matched = True
+        elif parsed["action"] == "doble_clic":
+            if await _dblclick_objetivo(page, parsed["texto"]):
+                matched = True
+        elif parsed["action"] == "verificar":
+            if await _verificar_elemento(page, parsed["texto"]):
+                matched = True
+        elif parsed["action"] == "esperar_elemento":
+            if await _esperar_elemento(page, parsed["texto"]):
+                matched = True
+        elif parsed["action"] == "capturar":
+            if await _capturar_pantalla(page):
+                matched = True
+        elif parsed["action"] == "navegar":
+            if await _navegar_a_url(page, parsed["url"]):
+                matched = True
+        elif parsed["action"] == "subir_archivo":
+            if await _subir_archivo(page, parsed["archivo"]):
+                matched = True
+        elif parsed["action"] == "arrastrar":
+            if await _arrastrar(page, parsed["origen"], parsed["destino"]):
+                matched = True
+        elif parsed["action"] == "cerrar":
+            if await _cerrar(page, parsed["texto"]):
+                matched = True
+        elif parsed["action"] == "atras":
+            if await _navegar_atras(page):
+                matched = True
 
     if not matched:
         strategy = await _resolve_semantic_step(page, paso)
