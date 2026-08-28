@@ -6,6 +6,7 @@ realiza en server_mcp.py mediante mcp.tool()(func).
 """
 
 import os
+import re
 from typing import Any, Dict, List, Optional
 
 from app.browser import _close_browser, _connect_browser, _is_session_dead, _new_page
@@ -221,21 +222,23 @@ async def _fill_via(page, getter_name, candidate, texto, partial) -> bool:
 
 
 async def _fill_via_role(page, candidate, texto, partial) -> bool:
-    """Rellena un campo localizado por role textbox y nombre accesible."""
+    """Rellena un campo localizado por role (textbox/searchbox/combobox) y nombre accesible."""
     getter = getattr(page, "get_by_role", None)
     if getter is None:
         return False
-    try:
-        loc = getter("textbox", name=candidate, exact=not partial)
-    except TypeError:
-        loc = getter("textbox", name=candidate)
-    if not await _is_unique(loc):
-        return False
-    try:
-        await loc.fill(texto, timeout=STEP_TIMEOUT_MS)
-        return True
-    except Exception:
-        return False
+    for role in ("textbox", "searchbox", "combobox"):
+        try:
+            loc = getter(role, name=candidate, exact=not partial)
+        except TypeError:
+            loc = getter(role, name=candidate)
+        if not await _is_unique(loc):
+            continue
+        try:
+            await loc.fill(texto, timeout=STEP_TIMEOUT_MS)
+            return True
+        except Exception:
+            continue
+    return False
 
 
 async def _fill_via_attr(page, attr, candidate, texto, partial) -> bool:
@@ -682,17 +685,11 @@ async def _capturar_contenido(page, tipo: str) -> Optional[str]:
 
 async def _clic_cuantificador(page, ordinal: int, tipo: str) -> bool:
     """Hace clic en el elemento ordinal (1-based) de un tipo dado."""
-    selectores = {
-        "enlace": "a, [role=link]",
-        "link": "a, [role=link]",
-        "botón": "button, [role=button]",
-        "boton": "button, [role=button]",
-        "button": "button, [role=button]",
-        "elemento": "a, button, [role=link], [role=button]",
-        "element": "a, button, [role=link], [role=button]",
-    }
+    selector = parser.CLIC_CUANTIFICADOR_SELECTORES.get(
+        tipo, "a, button, [role=link], [role=button]"
+    )
     try:
-        loc = page.locator(selectores.get(tipo, "a, button, [role=link], [role=button]"))
+        loc = page.locator(selector)
         if await loc.count() < ordinal:
             return False
         target = loc.nth(ordinal - 1)
@@ -719,7 +716,8 @@ async def _execute_step(page, paso: str) -> Dict[str, Any]:
             if await _click_objetivo(page, parsed["texto"]):
                 matched = True
         elif parsed["action"] == "escribir":
-            if await _fill_campo(page, parsed["campo"], parsed["texto"]):
+            campo = re.sub(r"^(?:el|la|los|las|the|un|una|unos|unas)\s+", "", parsed["campo"])
+            if await _fill_campo(page, campo, parsed["texto"]):
                 matched = True
         elif parsed["action"] == "esperar":
             await page.wait_for_timeout(parsed["segundos"] * 1000)

@@ -110,7 +110,7 @@ RE_CAPTURAR_CONTENIDO = re.compile(
 RE_CLIC_CUANTIFICADOR = re.compile(
     r"(?:clic|click)\s+(?:en|on)\s+(?:el|la|the)\s+"
     r"(primer|first|segundo|second|tercer|third)\s+"
-    r"(enlace|link|botón|boton|button|elemento|element)"
+    r"(resultado|result|enlace|link|botón|boton|button|elemento|element)"
     r"(?:\s+.+)?",
     re.IGNORECASE,
 )
@@ -123,6 +123,29 @@ STOPWORDS = frozenset({
     "or", "campo", "field", "botón", "boton", "button", "enlace", "link",
     "icono", "ícono", "icon",
 })
+
+# Ordinales soportados por el clic cuantificador (1-based).
+ORDINALES: dict[str, int] = {
+    "primer": 1,
+    "first": 1,
+    "segundo": 2,
+    "second": 2,
+    "tercer": 3,
+    "third": 3,
+}
+
+# Selectores CSS por tipo de elemento para el clic cuantificador.
+CLIC_CUANTIFICADOR_SELECTORES: dict[str, str] = {
+    "enlace": "a, [role=link]",
+    "link": "a, [role=link]",
+    "botón": "button, [role=button]",
+    "boton": "button, [role=button]",
+    "button": "button, [role=button]",
+    "elemento": "a, button, [role=link], [role=button]",
+    "element": "a, button, [role=link], [role=button]",
+    "resultado": "a, button, [role=link], [role=button]",
+    "result": "a, button, [role=link], [role=button]",
+}
 
 
 def tokenize(text: str) -> List[str]:
@@ -258,20 +281,11 @@ def parse_step(paso: str) -> Optional[dict]:
     if match_clic_cuantificador:
         return {
             "action": "clic_cuantificador",
-            "ordinal": {
-                "primer": 1, "first": 1,
-                "segundo": 2, "second": 2,
-                "tercer": 3, "third": 3,
-            }[match_clic_cuantificador.group(1)],
+            "ordinal": ORDINALES[match_clic_cuantificador.group(1)],
             "tipo": match_clic_cuantificador.group(2).strip(),
         }
 
-    # 18. Clic.
-    match_clic = RE_CLIC.match(paso_lower)
-    if match_clic:
-        return {"action": "clic", "texto": match_clic.group(1).strip()}
-
-    # 19. Escribir.
+    # 18. Escribir (antes que clic para eliminar ambigüedad de verbos).
     match_escribir = RE_ESCRIBIR.match(paso_lower)
     if match_escribir:
         texto = next(g for g in match_escribir.groups()[:3] if g is not None)
@@ -280,6 +294,11 @@ def parse_step(paso: str) -> Optional[dict]:
             "texto": texto.strip(),
             "campo": match_escribir.group(4).strip(),
         }
+
+    # 19. Clic.
+    match_clic = RE_CLIC.match(paso_lower)
+    if match_clic:
+        return {"action": "clic", "texto": match_clic.group(1).strip()}
 
     # 20. Hover + clic.
     match_hover_clic = RE_HOVER_CLIC.match(paso_lower)
