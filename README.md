@@ -18,15 +18,36 @@ El servidor expone exactamente **3 tools QA**:
 ## 1. Arquitectura general
 
 ```mermaid
-graph TD
-    A[Cliente MCP · stdio] -->|stdio| B[server_mcp.py · FastMCP]
-    B -->|qa_audit_url · qa_execute_user_flow · qa_get_runtime_errors| C[Grafo LangGraph · app/graph/]
-    C -->|START → browser → deep| D{route_after_browser}
-    D -->|hay steps| E[semantic]
-    D -->|sin steps| F[vision]
-    E --> G[semantic → END]
-    F --> G
-    G -->|Playwright · CDP| H[Browserless · Docker · :3000]
+flowchart TB
+    Client["🌐 Cliente MCP · stdio"] -->|"stdio"| MCP["⚡ FastMCP · server_mcp.py"]
+
+    MCP --> T1["📋 qa_audit_url\nAudita URL completa"]
+    MCP --> T2["▶️ qa_execute_user_flow\nEjecuta pasos de usuario"]
+    MCP --> T3["🔍 qa_get_runtime_errors\nRecupera errores capturados"]
+
+    T1 & T2 & T3 -->|"compilan y ejecutan el grafo"| Grafo
+
+    subgraph Grafo["📊 Grafo LangGraph — app/graph/"]
+        S((START)) --> Browser["🌐 browser_node\nConexión Playwright CDP"]
+        Browser --> Deep["🧠 deep_node\nDeep Agent · envuelve las 3 Tools QA"]
+        Deep --> Router{"🔀 route_after_browser"}
+        Router -->|"Con steps"| Semantic["💬 semantic_node\nAnálisis semántico"]
+        Router -->|"Sin steps"| Vision["👁️ vision_node\nAnálisis visual LLM"]
+        Vision --> Semantic
+        Semantic --> E((END))
+    end
+
+    subgraph Infra["🏗️ Infraestructura"]
+        direction LR
+        Pool["🔄 Session Pool\nTTL + Evicción LRU"]
+        BR["🐳 Browserless\nDocker · Puerto 3000"]
+        LLM["🤖 LLM Providers\nOpenAI · Anthropic"]
+    end
+
+    Browser --> Pool
+    Pool --> BR
+    Semantic --> LLM
+    Vision --> LLM
 ```
 
 - La configuración central del proyecto vive en **`app/config.py`**, que lee las
