@@ -7,9 +7,11 @@ conexion entre llamadas, identificadas por session_id via ContextVar.
 import asyncio
 import contextlib
 import contextvars
+import json
+import os
 import time
 from dataclasses import dataclass
-from typing import Any, Iterator
+from typing import Any, Dict, Iterator, List
 
 from app import browser as _browser_mod
 from app import config
@@ -24,6 +26,52 @@ class Session:
     page: Any
     last_used: float
     transient: bool = False
+
+
+def _storage_state_path() -> str:
+    """Ruta del archivo storageState (cookies) persistido entre flujos."""
+    return config.get_session_storage_state_path()
+
+
+async def _load_storage_state() -> List[Dict[str, Any]]:
+    """Carga las cookies persistidas (formato storageState de Playwright o lista plana)."""
+    path = _storage_state_path()
+    if not path or not os.path.exists(path):
+        return []
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except Exception:
+        return []
+    if isinstance(data, dict):
+        cookies = data.get("cookies")
+        return cookies if isinstance(cookies, list) else []
+    return data if isinstance(data, list) else []
+
+
+async def _save_cookies(cookies: List[Dict[str, Any]]) -> None:
+    """Persiste las cookies en disco para reutilizarlas entre flujos."""
+    path = _storage_state_path()
+    if not path or not cookies:
+        return
+    try:
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump({"cookies": cookies}, f, indent=2)
+    except Exception:
+        pass
+
+
+async def _restore_storage_state(page) -> None:
+    """Inyecta las cookies persistidas en el contexto de la página recién creada."""
+    cookies = await _load_storage_state()
+    if not cookies:
+        return
+    try:
+        context = getattr(page, "context", None)
+        if context is not None:
+            await context.add_cookies(cookies)
+    except Exception:
+        pass
 
 
 class SessionPool:
@@ -42,6 +90,7 @@ class SessionPool:
             async with self._lock:
                 browser = await _browser_mod._connect_browser()
                 page = await _browser_mod._new_page(browser)
+                await _restore_storage_state(page)
                 session = Session(
                     session_id=session_id,
                     browser=browser,
@@ -62,6 +111,7 @@ class SessionPool:
             await self._evict_locked()
             browser = await _browser_mod._connect_browser()
             page = await _browser_mod._new_page(browser)
+            await _restore_storage_state(page)
             session = Session(
                 session_id=session_id,
                 browser=browser,

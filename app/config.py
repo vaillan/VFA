@@ -105,3 +105,12 @@ def get_session_pool_max_size() -> int:
         return int(os.getenv("VFA_SESSION_POOL_MAX_SIZE", "5"))
     except ValueError:
         return 5
+
+
+def get_session_storage_state_path() -> str:
+    """Retorna la ruta del archivo storageState (cookies) persistido entre flujos.
+
+    El archivo usa el formato storageState de Playwright ({"cookies": [...]}) o
+    una lista plana de cookies, y permite inyectar sesión previamente exportada.
+    """
+    return os.getenv("VFA_SESSION_STORAGE_STATE", "session_storage_state.json")
