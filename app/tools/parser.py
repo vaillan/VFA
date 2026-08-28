@@ -14,7 +14,7 @@ from typing import List, Optional
 RE_CLIC = re.compile(r"(?:clic|click|pulsar|tap|hacer clic|hacer click)\s+(?:en|on|in)?\s*(.+)")
 RE_ESCRIBIR = re.compile(
     r"(?:escribir|write|type|enter|fill|llenar|rellenar|introducir)\s+"
-    r"(?:\"([^\"]+)\"|'([^']+)'|(.+?))\s+"
+    r"(?:\"([^\"]+)\"|'([^']+)'|(.+))\s+"
     r"(?:en|in|into|at)\s+"
     r"(?:el|la|los|las|the|a|an)?\s*"
     r"(.+)$"

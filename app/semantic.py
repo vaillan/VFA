@@ -8,6 +8,27 @@ from langchain_core.messages import HumanMessage
 from app import config
 from app.llm import get_vision_llm
 
+# Gate de verbos de escritura anclado al inicio con \b: evita falsos positivos
+# como "presionar enter" o "clic en el center" al añadir enter como verbo.
+_RE_ESCRIBIR_VERBO = re.compile(
+    r"^\s*(?:escribir|write|type|enter|fill|llenar|rellenar|completar|introducir)\b"
+)
+_RE_ESCRIBIR_TEXTO_EN_CAMPO = re.compile(
+    r"(?:escribir|write|type|enter|fill|llenar|rellenar|completar|introducir)\s+"
+    r"(?:\"([^\"]+)\"|'([^']+)'|(.+))\s+"
+    r"(?:en|in|into|at)\s+"
+    r"(?:el|la|los|las|the|a|an)?\s*(.+)"
+)
+_RE_ESCRIBIR_CAMPO_CON_TEXTO = re.compile(
+    r"(?:escribir|write|type|enter|fill|llenar|rellenar|completar|introducir)\s+"
+    r"(?:en|in)?\s*(?:el|la|los|las|the|a|an)?\s*(.+)\s+"
+    r"(?:con|de|with)\s+(.+)"
+)
+_RE_ESCRIBIR_EN_CAMPO_COLON = re.compile(
+    r"(?:escribir|write|type|enter|fill|llenar|rellenar|completar|introducir)\s+en\s+"
+    r"(?:el|la|los|las|the|a|an)?\s*(.+?)\s*:\s*(.+)"
+)
+
 
 def _flatten_accessibility_snapshot(snapshot) -> list:
     """Aplana el arbol de accesibilidad a una lista compacta de {role, name}."""
@@ -130,7 +151,7 @@ async def _resolve_semantic_step_deterministic(page, step: str) -> str:
     step_lower = step.lower()
 
     # Import diferido: evita el ciclo app.semantic -> app.tools -> app.tools.qa -> app.semantic.
-    from app.tools.parser import CLIC_CUANTIFICADOR_SELECTORES, ORDINALES
+    from app.tools.parser import CLIC_CUANTIFICADOR_SELECTORES, ORDINALES, generate_candidates
 
     # Clic cuantificador: "clic en el primer resultado", "click on the second link".
     match_cuant = re.match(
@@ -171,28 +192,44 @@ async def _resolve_semantic_step_deterministic(page, step: str) -> str:
         except Exception:
             return "unsupported"
 
-    # Claves de relleno de campos.
-    if any(k in step_lower for k in ("escribir", "llenar", "rellenar", "completar", "introducir")):
-        # Formato esperado: "<verbo> <texto> en <campo>"
-        match = re.match(r"(?:escribir|llenar|rellenar|completar|introducir) (.+) en (.+)", step_lower)
-        if not match:
+    # Claves de relleno de campos. Gate anclado al inicio con \b: evita que
+    # pasos como "presionar enter" o "clic en el center" entren por error.
+    if _RE_ESCRIBIR_VERBO.match(step_lower):
+        # Formatos: "<verbo> <texto> en <campo>", "<verbo> <campo> con/de <texto>"
+        # y "<verbo> en <campo>: <texto>". El texto libre se captura hasta el
+        # último separador (greedy) y las comillas tienen prioridad.
+        m_texto_en_campo = _RE_ESCRIBIR_TEXTO_EN_CAMPO.match(step_lower)
+        m_campo_con_texto = _RE_ESCRIBIR_CAMPO_CON_TEXTO.match(step_lower)
+        m_en_campo_colon = _RE_ESCRIBIR_EN_CAMPO_COLON.match(step_lower)
+        if m_texto_en_campo:
+            texto = next(g for g in m_texto_en_campo.groups()[:3] if g is not None)
+            campo = m_texto_en_campo.group(4)
+        elif m_campo_con_texto:
+            campo, texto = m_campo_con_texto.group(1), m_campo_con_texto.group(2)
+        elif m_en_campo_colon:
+            campo, texto = m_en_campo_colon.group(1), m_en_campo_colon.group(2)
+        else:
             return "unsupported"
-        texto = match.group(1).strip().strip("'\"")
-        campo = match.group(2).strip().strip("'\"")
+        texto = texto.strip().strip("'\"")
+        campo = campo.strip().strip("'\"")
         # Normaliza el campo eliminando artículos iniciales ("el campo nombre" -> "campo nombre").
         campo = re.sub(r"^(?:el|la|los|las|the|un|una|unos|unas)\s+", "", campo)
         if not texto or not campo:
             return "unsupported"
-        try:
-            await page.get_by_label(campo).fill(texto)
-            return "semantic"
-        except Exception:
-            pass
-        try:
-            await page.get_by_placeholder(campo).fill(texto)
-            return "semantic"
-        except Exception:
-            return "unsupported"
+        # Resuelve el campo probando candidatos de mayor a menor para cubrir
+        # campos largos ("campo de nombre de usuario" -> "nombre de usuario").
+        for candidato in generate_candidates(campo):
+            try:
+                await page.get_by_label(candidato).fill(texto)
+                return "semantic"
+            except Exception:
+                pass
+            try:
+                await page.get_by_placeholder(candidato).fill(texto)
+                return "semantic"
+            except Exception:
+                continue
+        return "unsupported"
 
     # Scroll.
     if any(k in step_lower for k in ("scroll", "desplazar", "desplázate", "desplazate", "escrolea", "muévete", "muevete", "navega hacia", "bajar", "subir", "ir abajo", "ir arriba")):
