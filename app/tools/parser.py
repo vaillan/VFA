@@ -12,6 +12,13 @@ from typing import List, Optional
 # Patrones regex de acciones (agnósticos al idioma). El conjunto de verbos es
 # reducido y multilingüe; la resolución del objetivo NO depende de diccionarios.
 RE_CLIC = re.compile(r"(?:clic|click|pulsar|tap|hacer clic|hacer click)\s+(?:en|on|in)?\s*(.+)")
+
+# Clic en botón: el separador (de/del/para/que dice/labeled) es obligatorio para
+# no romper el caso histórico "hacer clic en el botón Submit" (clic genérico).
+RE_CLIC_BOTON = re.compile(
+    r"(?:clic|click|pulsar|tap|hacer clic|hacer click)\s+(?:en|on|in|sobre|over)?\s*(?:el|la|los|las|the|a|an|un|una|unos|unas)?\s*(?:botón|boton|button)\s+(?:de|del|para|que dice|labeled)\s+(.+)",
+    re.IGNORECASE,
+)
 RE_ESCRIBIR = re.compile(
     r"(?:escribir|write|type|enter|fill|llenar|rellenar|introducir)\s+"
     r"(?:\"([^\"]+)\"|'([^']+)'|(.+))\s+"
@@ -297,7 +304,12 @@ def parse_step(paso: str) -> Optional[dict]:
             "tipo": match_clic_cuantificador.group(2).strip(),
         }
 
-    # 19. Escribir (antes que clic para eliminar ambigüedad de verbos).
+    # 19. Clic en botón ("clic en el botón de búsqueda") antes que escribir y clic genérico.
+    match_clic_boton = RE_CLIC_BOTON.match(paso_lower)
+    if match_clic_boton:
+        return {"action": "clic_boton", "texto": match_clic_boton.group(1).strip()}
+
+    # 20. Escribir (antes que clic para eliminar ambigüedad de verbos).
     match_escribir = RE_ESCRIBIR.match(paso_lower)
     if match_escribir:
         texto = next(g for g in match_escribir.groups()[:3] if g is not None)
@@ -307,12 +319,12 @@ def parse_step(paso: str) -> Optional[dict]:
             "campo": match_escribir.group(4).strip(),
         }
 
-    # 20. Clic.
+    # 21. Clic.
     match_clic = RE_CLIC.match(paso_lower)
     if match_clic:
         return {"action": "clic", "texto": match_clic.group(1).strip()}
 
-    # 21. Hover + clic.
+    # 22. Hover + clic.
     match_hover_clic = RE_HOVER_CLIC.match(paso_lower)
     if match_hover_clic:
         return {
@@ -321,7 +333,7 @@ def parse_step(paso: str) -> Optional[dict]:
             "clic_texto": match_hover_clic.group(2).strip(),
         }
 
-    # 22. Hover.
+    # 23. Hover.
     match_hover = RE_HOVER.match(paso_lower)
     if match_hover:
         return {"action": "hover", "texto": match_hover.group(1).strip()}

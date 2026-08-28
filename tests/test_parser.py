@@ -355,3 +355,66 @@ def test_parse_step_leer_contenido_pagina():
 
 def test_parse_step_extraer_texto():
     assert parser.parse_step("extraer texto de la sección noticias") == {"action": "leer"}
+
+
+def test_parse_step_clic_boton_de():
+    assert parser.parse_step("clic en el botón de búsqueda") == {
+        "action": "clic_boton",
+        "texto": "búsqueda",
+    }
+
+
+def test_parse_step_clic_boton_del():
+    assert parser.parse_step("clic en el botón del menú") == {
+        "action": "clic_boton",
+        "texto": "menú",
+    }
+
+
+def test_parse_step_clic_boton_labeled():
+    assert parser.parse_step("click on the button labeled Search") == {
+        "action": "clic_boton",
+        "texto": "search",
+    }
+
+
+def test_parse_step_clic_boton_sin_separador_regresion():
+    # Sin separador (de/del/para/que dice/labeled) cae en el clic genérico histórico.
+    assert parser.parse_step("hacer clic en el botón Submit") == {
+        "action": "clic",
+        "texto": "el botón submit",
+    }
+
+
+def test_parse_step_clic_boton_no_colision_cuantificador():
+    assert parser.parse_step("clic en el primer botón") == {
+        "action": "clic_cuantificador",
+        "ordinal": 1,
+        "tipo": "botón",
+    }
+
+
+def test_execute_step_clic_boton_role():
+    page = FakeParserPage({"role:button:búsqueda": 1})
+    resultados = asyncio.run(qa_mod._execute_step(page, "clic en el botón de búsqueda"))
+    assert resultados["status"] == "ok"
+    assert "click:role:button:búsqueda" in page.actions
+
+
+def test_execute_step_clic_boton_input_submit():
+    page = FakeParserPage({'input[type="submit"][value*="búsqueda" i]': 1})
+    resultados = asyncio.run(qa_mod._execute_step(page, "clic en el botón de búsqueda"))
+    assert resultados["status"] == "ok"
+    assert 'click:input[type="submit"][value*="búsqueda" i]' in page.actions
+
+
+def test_click_objetivo_input_submit_generico():
+    page = FakeParserPage({'input[type="submit"][value*="buscar" i]': 1})
+    assert asyncio.run(qa_mod._click_objetivo(page, "buscar"))
+    assert 'click:input[type="submit"][value*="buscar" i]' in page.actions
+
+
+def test_click_boton_fallback_generico():
+    page = FakeParserPage({'[class*="búsqueda"]': 1})
+    assert asyncio.run(qa_mod._click_boton(page, "búsqueda"))
+    assert 'click:[class*="búsqueda"]' in page.actions

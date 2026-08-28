@@ -389,6 +389,26 @@ async def _click_via_class(page, token, method: str = "click") -> bool:
         return False
 
 
+async def _click_via_input_valor(page, candidate: str, method: str = "click") -> bool:
+    """Hace clic en un <input type=submit|button> cuyo value contenga el candidato (case-insensitive)."""
+    locator = getattr(page, "locator", None)
+    if locator is None or not candidate:
+        return False
+    for selector in (
+        f'input[type="submit"][value*="{candidate}" i]',
+        f'input[type="button"][value*="{candidate}" i]',
+    ):
+        loc = locator(selector)
+        if not await _is_unique(loc):
+            continue
+        try:
+            await getattr(loc, method)(timeout=STEP_TIMEOUT_MS)
+            return True
+        except Exception:
+            continue
+    return False
+
+
 async def _click_objetivo(page, texto) -> bool:
     """Resuelve el objetivo de un clic con espera activa, scroll y reintento (SPAs dinámicos)."""
     for intento in range(2):
@@ -409,6 +429,10 @@ async def _click_objetivo(page, texto) -> bool:
         for candidate in parser.generate_candidates(texto):
             if await _click_via_role(page, candidate):
                 return True
+        # Selector genérico "clic en <texto>" también resuelve inputs submit/button por value.
+        for candidate in parser.generate_candidates(texto):
+            if await _click_via_input_valor(page, candidate):
+                return True
         for partial in (False, True):
             for candidate in parser.generate_candidates(texto):
                 for attr in ("aria-label", "title", "data-test", "data-testid", "id"):
@@ -425,6 +449,25 @@ async def _click_objetivo(page, texto) -> bool:
             except Exception:
                 pass
     return False
+
+
+async def _click_boton(page, texto: str) -> bool:
+    """Resuelve un clic de botón: texto visible, role=button, value de input, atributos y fallback genérico."""
+    if await _click_via_text(page, texto):
+        return True
+    if await _click_via_role(page, texto):
+        return True
+    for candidate in parser.generate_candidates(texto):
+        if await _click_via_role(page, candidate):
+            return True
+        if await _click_via_input_valor(page, candidate):
+            return True
+    for partial in (False, True):
+        for candidate in parser.generate_candidates(texto):
+            for attr in ("aria-label", "title", "data-test", "data-testid", "id"):
+                if await _click_via_attr(page, attr, candidate, partial):
+                    return True
+    return await _click_objetivo(page, texto)
 
 
 async def _hover_via_text(page, texto) -> bool:
@@ -745,6 +788,10 @@ async def _execute_step(page, paso: str) -> Dict[str, Any]:
     if parsed is not None:
         if parsed["action"] == "clic":
             if await _click_objetivo(page, parsed["texto"]):
+                matched = True
+
+        elif parsed["action"] == "clic_boton":
+            if await _click_boton(page, parsed["texto"]):
                 matched = True
         elif parsed["action"] == "escribir":
             campo = re.sub(r"^(?:el|la|los|las|the|un|una|unos|unas)\s+", "", parsed["campo"])
