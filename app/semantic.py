@@ -229,6 +229,11 @@ async def _resolve_semantic_step_deterministic(page, step: str) -> str:
                 return "semantic"
             except Exception:
                 continue
+        # Último recurso compartido con el parser regex de qa.py. Import
+        # diferido para no romper el ciclo app.semantic -> app.tools.qa.
+        from app.tools.qa import _fill_unico_campo_visible
+        if await _fill_unico_campo_visible(page, texto):
+            return "semantic"
         return "unsupported"
 
     # Scroll.

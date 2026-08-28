@@ -12,9 +12,10 @@ from app.tools.parser import CLIC_CUANTIFICADOR_SELECTORES
 
 
 class FakeLocator:
-    def __init__(self, page, count=0):
+    def __init__(self, page, count=0, role=None):
         self.page = page
         self.count_value = count
+        self._role = role
         self.first = self
 
     async def count(self) -> int:
@@ -27,22 +28,30 @@ class FakeLocator:
     async def click(self) -> None:
         self.page.clicks.append("click")
 
-    async def fill(self, text: str) -> None:
-        self.page.fills.append(text)
+    async def fill(self, text: str, timeout=None) -> None:
+        if self._role:
+            self.page.fills.append(f"{self._role}:{text}")
+        else:
+            self.page.fills.append(text)
+
+    async def is_visible(self) -> bool:
+        return True
 
 
 class FakePage:
-    def __init__(self, counts=None, raise_label=False, raise_placeholder=False, evaluate_result: str = ""):
+    def __init__(self, counts=None, raise_label=False, raise_placeholder=False, evaluate_result: str = "", role_counts=None):
         self.counts = counts or {}
         self.raise_label = raise_label
         self.raise_placeholder = raise_placeholder
         self.evaluate_result = evaluate_result
+        self.role_counts = role_counts or {}
         self.clicks = []
         self.fills = []
         self.nth_indexes = []
         self.locator_selectors = []
         self.labels = []
         self.placeholders = []
+        self.roles_called = []
         self.evaluations = []
 
     def locator(self, selector: str) -> FakeLocator:
@@ -62,7 +71,8 @@ class FakePage:
         return FakeLocator(self)
 
     def get_by_role(self, role: str, name=None, exact=None) -> FakeLocator:
-        return FakeLocator(self)
+        self.roles_called.append(role)
+        return FakeLocator(self, count=self.role_counts.get(role, 0), role=role)
 
     def get_by_text(self, texto: str, exact=None) -> FakeLocator:
         return FakeLocator(self)
@@ -248,3 +258,17 @@ def test_leer_contenido_vacio_unsupported():
         _resolve_semantic_step_deterministic(page, "leer contenido")
     )
     assert resultado == "unsupported"
+
+
+def test_escribir_fallback_textbox_unico():
+    """(19) Con label y placeholder fallidos, rellena el único searchbox visible."""
+    page = FakePage(
+        raise_label=True,
+        raise_placeholder=True,
+        role_counts={"searchbox": 1},
+    )
+    resultado = asyncio.run(
+        _resolve_semantic_step_deterministic(page, "escribir hola en el campo nombre")
+    )
+    assert resultado == "semantic"
+    assert "searchbox:hola" in page.fills

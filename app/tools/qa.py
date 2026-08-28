@@ -271,13 +271,44 @@ async def _fill_candidate(page, candidate, texto, partial) -> bool:
     return False
 
 
+async def _fill_unico_campo_visible(page, texto: str) -> bool:
+    """Rellena el único campo de escritura visible sin restricción de nombre (último recurso).
+
+    Combobox cubre buscadores que exponen role=combobox (p.ej. Google).
+    """
+    getter = getattr(page, "get_by_role", None)
+    if getter is None:
+        return False
+    for role in ("searchbox", "textbox", "combobox"):
+        try:
+            loc = getter(role)
+        except Exception:
+            continue
+        if not await _is_unique(loc):
+            continue
+        visible = getattr(loc, "is_visible", None)
+        if visible is not None:
+            try:
+                if not await visible():
+                    continue
+            except Exception:
+                continue
+        try:
+            await loc.fill(texto, timeout=STEP_TIMEOUT_MS)
+            return True
+        except Exception:
+            continue
+    return False
+
+
 async def _fill_campo(page, campo, texto) -> bool:
     """Resuelve el campo objetivo probando candidatos exactos y luego parciales."""
     for partial in (False, True):
         for candidate in parser.generate_candidates(campo):
             if await _fill_candidate(page, candidate, texto, partial):
                 return True
-    return False
+    # Último recurso: único campo de escritura visible en la página.
+    return await _fill_unico_campo_visible(page, texto)
 
 
 async def _click_via_text(page, texto, method: str = "click") -> bool:
