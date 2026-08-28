@@ -1,7 +1,8 @@
 """Pruebas de las ramas deterministas de app/semantic.py.
 
-Cubre el clic cuantificador ("clic en el primer resultado") y la rama de
-escribir normalizada (eliminación de artículos iniciales del campo).
+Cubre el clic cuantificador ("clic en el primer resultado"), la rama de
+escribir normalizada (eliminación de artículos iniciales del campo) y la
+rama de scroll (direcciones arriba/abajo y scroll genérico).
 """
 
 import asyncio
@@ -31,16 +32,18 @@ class FakeLocator:
 
 
 class FakePage:
-    def __init__(self, counts=None, raise_label=False, raise_placeholder=False):
+    def __init__(self, counts=None, raise_label=False, raise_placeholder=False, evaluate_result: str = ""):
         self.counts = counts or {}
         self.raise_label = raise_label
         self.raise_placeholder = raise_placeholder
+        self.evaluate_result = evaluate_result
         self.clicks = []
         self.fills = []
         self.nth_indexes = []
         self.locator_selectors = []
         self.labels = []
         self.placeholders = []
+        self.evaluations = []
 
     def locator(self, selector: str) -> FakeLocator:
         self.locator_selectors.append(selector)
@@ -63,6 +66,10 @@ class FakePage:
 
     def get_by_text(self, texto: str, exact=None) -> FakeLocator:
         return FakeLocator(self)
+
+    async def evaluate(self, expr: str) -> str:
+        self.evaluations.append(expr)
+        return self.evaluate_result
 
 
 def test_clic_primer_resultado():
@@ -190,5 +197,54 @@ def test_escribir_ambos_fallan_unsupported():
     page = FakePage(raise_label=True, raise_placeholder=True)
     resultado = asyncio.run(
         _resolve_semantic_step_deterministic(page, "escribir hola en el campo nombre")
+    )
+    assert resultado == "unsupported"
+
+
+def test_scroll_escrolea_abajo():
+    """(14) 'escrolea hacia abajo' se resuelve como scroll hacia abajo."""
+    page = FakePage()
+    resultado = asyncio.run(
+        _resolve_semantic_step_deterministic(page, "escrolea hacia abajo")
+    )
+    assert resultado == "semantic"
+    assert page.evaluations == ["window.scrollTo(0, document.body.scrollHeight)"]
+
+
+def test_scroll_subir_arriba():
+    """(15) 'subir' se resuelve como scroll al inicio de la página."""
+    page = FakePage()
+    resultado = asyncio.run(
+        _resolve_semantic_step_deterministic(page, "subir")
+    )
+    assert resultado == "semantic"
+    assert page.evaluations == ["window.scrollTo(0, 0)"]
+
+
+def test_scroll_generico():
+    """(16) Scroll sin dirección usa scrollBy(0, 500)."""
+    page = FakePage()
+    resultado = asyncio.run(
+        _resolve_semantic_step_deterministic(page, "scroll")
+    )
+    assert resultado == "semantic"
+    assert page.evaluations == ["window.scrollBy(0, 500)"]
+
+
+def test_leer_contenido():
+    """(17) 'leer el contenido de la página' retorna el innerText evaluado."""
+    page = FakePage(evaluate_result="Hola mundo")
+    resultado = asyncio.run(
+        _resolve_semantic_step_deterministic(page, "leer el contenido de la página")
+    )
+    assert resultado == "Hola mundo"
+    assert page.evaluations == ["document.body.innerText"]
+
+
+def test_leer_contenido_vacio_unsupported():
+    """(18) 'leer contenido' con innerText vacío retorna 'unsupported'."""
+    page = FakePage(evaluate_result="")
+    resultado = asyncio.run(
+        _resolve_semantic_step_deterministic(page, "leer contenido")
     )
     assert resultado == "unsupported"

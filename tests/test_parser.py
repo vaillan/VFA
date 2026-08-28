@@ -292,3 +292,66 @@ def test_execute_step_clic_cuantificador():
     resultados = asyncio.run(qa_mod._execute_step(page, "clic en el primer enlace"))
     assert resultados["status"] == "ok"
     assert "click:a, [role=link]" in page.actions
+
+
+def test_parse_step_scroll_escrolea():
+    assert parser.parse_step("escrolea hacia abajo") == {
+        "action": "scroll",
+        "texto": "abajo",
+    }
+
+
+def test_parse_step_scroll_arriba():
+    assert parser.parse_step("scroll hacia arriba") == {
+        "action": "scroll",
+        "texto": "arriba",
+    }
+
+
+def test_parse_step_scroll_desplazate():
+    assert parser.parse_step("desplázate hacia abajo") == {
+        "action": "scroll",
+        "texto": "abajo",
+    }
+
+
+def test_parse_step_clic_products():
+    assert parser.parse_step("clic en Products") == {
+        "action": "clic",
+        "texto": "products",
+    }
+
+
+def test_parse_step_hacer_clic_boton():
+    assert parser.parse_step("hacer clic en el botón Submit") == {
+        "action": "clic",
+        "texto": "el botón submit",
+    }
+
+
+def test_parse_step_escribir_type_ingles():
+    assert parser.parse_step("type standard_user in the username field") == {
+        "action": "escribir",
+        "texto": "standard_user",
+        "campo": "username field",
+    }
+
+
+def test_parse_step_escribir_fill():
+    assert parser.parse_step("fill secret in password") == {
+        "action": "escribir",
+        "texto": "secret",
+        "campo": "password",
+    }
+
+
+def test_parse_step_leer_contenido():
+    assert parser.parse_step("leer contenido") == {"action": "leer"}
+
+
+def test_parse_step_leer_contenido_pagina():
+    assert parser.parse_step("leer el contenido de la página") == {"action": "leer"}
+
+
+def test_parse_step_extraer_texto():
+    assert parser.parse_step("extraer texto de la sección noticias") == {"action": "leer"}

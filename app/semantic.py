@@ -153,7 +153,7 @@ async def _resolve_semantic_step_deterministic(page, step: str) -> str:
     # Acciones de clic / pulsación.
     if any(k in step_lower for k in ("clic", "click", "enviar", "botón", "boton", "pulsar", "presionar")):
         texto = step_lower
-        for prefijo in ("enviar ", "clic en ", "click en ", "pulsar ", "presionar ", "botón ", "boton "):
+        for prefijo in ("hacer clic en ", "hacer click en ", "enviar ", "clic en ", "click en ", "pulsar ", "presionar ", "botón ", "boton "):
             if prefijo in texto:
                 texto = texto.split(prefijo, 1)[1]
                 break
@@ -195,11 +195,11 @@ async def _resolve_semantic_step_deterministic(page, step: str) -> str:
             return "unsupported"
 
     # Scroll.
-    if any(k in step_lower for k in ("scroll", "desplazar", "bajar", "subir", "ir abajo", "ir arriba")):
+    if any(k in step_lower for k in ("scroll", "desplazar", "desplázate", "desplazate", "escrolea", "muévete", "muevete", "navega hacia", "bajar", "subir", "ir abajo", "ir arriba")):
         try:
-            if any(k in step_lower for k in ("arriba", "up", "top", "inicio", "start")):
+            if any(k in step_lower for k in ("arriba", "up", "top", "inicio", "start", "subir")):
                 await page.evaluate("window.scrollTo(0, 0)")
-            elif any(k in step_lower for k in ("abajo", "down", "bottom", "fin", "end")):
+            elif any(k in step_lower for k in ("abajo", "down", "bottom", "fin", "end", "bajar")):
                 await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
             else:
                 await page.evaluate("window.scrollBy(0, 500)")
@@ -235,6 +235,14 @@ async def _resolve_semantic_step_deterministic(page, step: str) -> str:
             return "unsupported"
         try:
             return "semantic" if await page.get_by_text(texto, exact=False).first.is_visible() else "unsupported"
+        except Exception:
+            return "unsupported"
+
+    # Leer contenido de la página.
+    if any(k in step_lower for k in ("leer", "read")):
+        try:
+            texto = await page.evaluate("document.body.innerText")
+            return texto if texto else "unsupported"
         except Exception:
             return "unsupported"
 

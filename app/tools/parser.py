@@ -29,7 +29,7 @@ RE_HOVER_CLIC = re.compile(
 # clic, verificación, espera de elemento, captura, navegación, archivos,
 # drag & drop, cierre de modales y retroceso).
 RE_SCROLL = re.compile(
-    r"(?:scroll|desplazar|bajar|subir|ir abajo|ir arriba|navigate down|navigate up)\s*"
+    r"(?:scroll|desplazar|desplázate|desplazate|escrolea|bajar|subir|muévete|muevete|navega hacia|ir abajo|ir arriba|navigate down|navigate up)\s*"
     r"(?:(?:hacia|to|a|al|into)?\s*(.+))?",
     re.IGNORECASE,
 )
@@ -105,6 +105,13 @@ RE_CAPTURAR_CONTENIDO = re.compile(
     r"(?:el|la|the|a|an)?\s*"
     r"(título|titulo|title|contenido|content|texto|text|heading|encabezado|h1|h2|h3|párrafo|parrafo|paragraph)"
     r"(?:\s+(?:de|of|del|from)\s+.+)?",
+    re.IGNORECASE,
+)
+RE_LEER = re.compile(
+    r"(?:leer|read|extraer|extract)\s+"
+    r"(?:el|la|the|a|an)?\s*"
+    r"(?:contenido|content|texto|text|página|pagina|page)"
+    r"(?:\s+(?:de|of|del|from)\s+(?:el|la|the)?\s*(?:página|pagina|page))?",
     re.IGNORECASE,
 )
 RE_CLIC_CUANTIFICADOR = re.compile(
@@ -254,7 +261,12 @@ def parse_step(paso: str) -> Optional[dict]:
     if match_esperar_el:
         return {"action": "esperar_elemento", "texto": match_esperar_el.group(1).strip()}
 
-    # 13. Capturar contenido (antes que capturar pantalla).
+    # 13. Leer contenido (antes que capturar contenido, por "extraer texto").
+    match_leer = RE_LEER.match(paso_lower)
+    if match_leer:
+        return {"action": "leer"}
+
+    # 14. Capturar contenido (antes que capturar pantalla).
     match_capturar_contenido = RE_CAPTURAR_CONTENIDO.match(paso_lower)
     if match_capturar_contenido:
         return {
@@ -262,21 +274,21 @@ def parse_step(paso: str) -> Optional[dict]:
             "tipo": match_capturar_contenido.group(1).strip(),
         }
 
-    # 14. Capturar pantalla.
+    # 15. Capturar pantalla.
     if RE_CAPTURAR.match(paso_lower):
         return {"action": "capturar"}
 
-    # 15. Scroll.
+    # 16. Scroll.
     match_scroll = RE_SCROLL.match(paso_lower)
     if match_scroll:
         return {"action": "scroll", "texto": (match_scroll.group(1) or "").strip()}
 
-    # 16. Limpiar campo (antes que clic).
+    # 17. Limpiar campo (antes que clic).
     match_limpiar = RE_LIMPIAR.match(paso_lower)
     if match_limpiar:
         return {"action": "limpiar", "campo": match_limpiar.group(1).strip()}
 
-    # 17. Clic cuantificador (antes que clic genérico).
+    # 18. Clic cuantificador (antes que clic genérico).
     match_clic_cuantificador = RE_CLIC_CUANTIFICADOR.match(paso_lower)
     if match_clic_cuantificador:
         return {
@@ -285,7 +297,7 @@ def parse_step(paso: str) -> Optional[dict]:
             "tipo": match_clic_cuantificador.group(2).strip(),
         }
 
-    # 18. Escribir (antes que clic para eliminar ambigüedad de verbos).
+    # 19. Escribir (antes que clic para eliminar ambigüedad de verbos).
     match_escribir = RE_ESCRIBIR.match(paso_lower)
     if match_escribir:
         texto = next(g for g in match_escribir.groups()[:3] if g is not None)
@@ -295,12 +307,12 @@ def parse_step(paso: str) -> Optional[dict]:
             "campo": match_escribir.group(4).strip(),
         }
 
-    # 19. Clic.
+    # 20. Clic.
     match_clic = RE_CLIC.match(paso_lower)
     if match_clic:
         return {"action": "clic", "texto": match_clic.group(1).strip()}
 
-    # 20. Hover + clic.
+    # 21. Hover + clic.
     match_hover_clic = RE_HOVER_CLIC.match(paso_lower)
     if match_hover_clic:
         return {
@@ -309,7 +321,7 @@ def parse_step(paso: str) -> Optional[dict]:
             "clic_texto": match_hover_clic.group(2).strip(),
         }
 
-    # 21. Hover.
+    # 22. Hover.
     match_hover = RE_HOVER.match(paso_lower)
     if match_hover:
         return {"action": "hover", "texto": match_hover.group(1).strip()}
