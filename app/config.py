@@ -20,6 +20,11 @@ def get_browserbase_url() -> str:
     return os.getenv("BROWSERBASE_URL", "ws://localhost:3000")
 
 
+def get_headless() -> bool:
+    """Indica si el navegador corre en modo headless (HEADLESS, default 'true')."""
+    return os.getenv("HEADLESS", "true").strip().lower() in ("1", "true", "yes")
+
+
 def get_openai_key() -> Optional[str]:
     """Retorna la API key de OpenAI (o None si no esta configurada)."""
     return os.getenv("OPENAI_API_KEY")

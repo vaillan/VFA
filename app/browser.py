@@ -1,21 +1,27 @@
-"""Helpers de conexion y ciclo de vida del navegador remoto de Browserless."""
+"""Helpers de conexion y ciclo de vida del navegador (remoto Browserless o Chromium local visible)."""
 
 from typing import Any
 
 from playwright.async_api import async_playwright
 
-from app.config import get_browserbase_url
+from app.config import get_browserbase_url, get_headless
 
 
 async def _connect_browser():
-    """Conecta al navegador remoto de Browserless vía CDP.
+    """Conecta al navegador remoto de Browserless vía CDP o lanza Chromium local visible.
+
+    El modo se decide por HEADLESS: con 'true' (default) se conecta al CDP de
+    Browserless; con 'false' se lanza un Chromium local maximizado y visible.
 
     Returns:
-        Browser: instancia del navegador conectado.
+        Browser: instancia del navegador conectado o lanzado.
     """
     p = await async_playwright().start()
     try:
-        browser = await p.chromium.connect_over_cdp(get_browserbase_url())
+        if get_headless():
+            browser = await p.chromium.connect_over_cdp(get_browserbase_url())
+        else:
+            browser = await p.chromium.launch(headless=False, args=["--start-maximized"])
     except Exception:
         await p.stop()
         raise
@@ -25,15 +31,20 @@ async def _connect_browser():
 
 
 async def _new_page(browser):
-    """Crea una nueva página con un viewport estándar de 1280x720.
+    """Crea una nueva página; el viewport solo se fuerza en modo headless.
+
+    En modo visible (HEADLESS=false) no se define viewport para que la página
+    ocupe la ventana maximizada del Chromium local.
 
     Args:
-        browser: instancia del navegador conectado.
+        browser: instancia del navegador conectado o lanzado.
 
     Returns:
         Page: página recién creada.
     """
-    return await browser.new_page(viewport={"width": 1280, "height": 720})
+    if get_headless():
+        return await browser.new_page(viewport={"width": 1280, "height": 720})
+    return await browser.new_page()
 
 
 async def _close_browser(browser: Any) -> None:

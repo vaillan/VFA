@@ -1,7 +1,8 @@
-"""Pool de sesiones persistentes de navegador conectadas via CDP.
+"""Pool de sesiones persistentes de navegador (remoto CDP o Chromium local).
 
 Las tools QA adquieren/liberan sesiones del pool para mantener viva la
 conexion entre llamadas, identificadas por session_id via ContextVar.
+El lifecycle via Playwright es identico en ambos modos de navegador.
 """
 
 import asyncio
