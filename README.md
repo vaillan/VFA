@@ -1,21 +1,6 @@
 # VFA — Visual & Functional Auditor
 
-**VFA — Visual & Functional Auditor** es un servidor MCP
-(Model Context Protocol) construido con **FastMCP** que expone tres herramientas
-de QA — `qa_audit_url`, `qa_execute_user_flow` y `qa_get_runtime_errors` — para
-auditar aplicaciones web. Las tools del MCP VisualQA se conectan al navegador
-remoto **Browserless** (ejecutado en Docker) vía CDP usando **Playwright**; no
-lanzan un Chromium local. El agente captura errores de consola y de red, ejecuta
-flujos de usuario en lenguaje natural y analiza visualmente las páginas con un
-modelo LLM multimodal.
-
-El servidor expone exactamente **3 tools QA**:
-
-- `qa_audit_url` — audita una URL y reporta errores de consola, excepciones JS y fallos HTTP.
-- `qa_execute_user_flow` — ejecuta un flujo de usuario descrito en lenguaje natural.
-- `qa_get_runtime_errors` — recupera los errores de ejecución capturados durante la auditoría.
-
----
+VFA (Visual & Functional Auditor) es un servidor MCP construido con FastMCP que audita aplicaciones web usando el navegador remoto Browserless (Docker) via CDP con Playwright y analisis LLM multimodal. Expone 3 tools QA: `qa_audit_url` (audita una URL y reporta errores de consola, excepciones JS y fallos HTTP), `qa_execute_user_flow` (ejecuta un flujo de usuario en lenguaje natural) y `qa_get_runtime_errors` (recupera los errores de ejecucion capturados).
 
 ## 1. Arquitectura general
 
@@ -60,71 +45,20 @@ flowchart TB
     Semantic --> toolsQA
 ```
 
-- La configuración central del proyecto vive en **`app/config.py`**, que lee las
-  variables de entorno (con carga automática desde un archivo `.env` vía
-  `python-dotenv`).
-- El orquestador es un **grafo LangGraph** que vive en `app/graph/`:
-  - `state.py` — define el estado tipado `VFAState` que fluye entre los nodos.
-  - `nodes.py` — re-export de compatibilidad: la implementación real de los
-    nodos async `browser_node`, `deep_node`, `vision_node` y `semantic_node` y
-    del router condicional `route_after_browser` vive en `app/agents/`
-    (`browser_agent.py`, `deep_agent.py`, `vision_agent.py`, `semantic_agent.py`).
-  - `builder.py` — expone `build_graph()`/`get_compiled_graph()` y ensambla el
-    `StateGraph` con el flujo:
-    `START → browser → deep → condicional (route_after_browser: semantic si hay steps, vision si no) → vision → semantic → END`.
-- `server_mcp.py` compila y usa el grafo LangGraph; la API pública de las 3 tools
-  MCP no cambió.
-- `requirements.txt` incluye `langgraph>=0.2` y ya no incluye `crewai`.
-- La conexión al navegador remoto se realiza en `app/browser.py` mediante
-  Playwright y el endpoint CDP de Browserless.
-- `app/session_pool.py` implementa un **pool de sesiones persistentes** de
-  navegador con TTL configurable y evicción LRU, reutilizables entre llamadas MCP.
-- `app/tools/qa.py` implementa **reconexión automática** cuando la sesión remota
-  muere a mitad de ejecución, restaurando las cookies de sesión.
+- **Config:** `app/config.py` lee las variables de entorno con carga automatica desde `.env` vía `python-dotenv`.
+- **Grafo LangGraph** (`app/graph/`): `state.py` define el estado tipado `VFAState`; `builder.py` expone `build_graph()`/`get_compiled_graph()` ensamblando el `StateGraph`; los nodos async `browser_node`, `deep_node`, `vision_node`, `semantic_node` y el router `route_after_browser` viven en `app/agents/` (browser_agent.py, deep_agent.py, vision_agent.py, semantic_agent.py), con re-exports de compatibilidad en `app/graph/nodes.py`. Flujo: START → browser → deep → condicional (semantic si hay steps, vision si no) → vision → semantic → END. `server_mcp.py` compila y usa el grafo; la API publica de las 3 tools MCP no cambia.
+- **Session Pool** (`app/session_pool.py`): pool de sesiones de navegador reutilizables entre llamadas MCP, con TTL configurable y eviccion LRU; la clase `SessionPool` expone `acquire()`/`release()` e identifica cada sesion por `session_id` vía ContextVar. La conexion al navegador remoto se realiza en `app/browser.py` (Playwright + CDP Browserless; modo local visible si `HEADLESS=false`).
+- **Deep Agent** (`app/agents/deep_agent.py`): agente autónomo de `deepagents` (`create_deep_agent()`) que envuelve las 3 tools QA como tools de LangChain y se ejecuta como nodo `deep` del grafo.
+- **Reconexion automatica** (`app/tools/qa.py`): `qa_audit_url` y `qa_execute_user_flow` reconectan automáticamente (MAX_RECONNECTS=3) cuando la sesion remota muere a mitad de ejecucion, capturando y restaurando las cookies de sesion.
+- **Capa NLP → Playwright** (`app/tools/parser.py` → `app/tools/qa.py`): 22+ patrones regex multilingues (ES/EN) convierten lenguaje natural en acciones estructuradas, resueltas con locators nativos de Playwright (`get_by_text`, `get_by_role`, `get_by_label`, `locator()`). `app/semantic.py` implementa el fallback de 3 capas: regex NLP → snapshot de accesibilidad → LLM multimodal. `requirements.txt` incluye `langgraph>=0.2` y ya no incluye `crewai`.
 
-- `app/tools/parser.py` contiene **22+ patrones regex multilingües** (ES/EN)
-  que componen la capa NLP del sistema: transforman instrucciones en lenguaje
-  natural (ej. *"clic en el botón de búsqueda"*) en acciones estructuradas
-  (ej. `{"action": "clic_boton", "texto": "búsqueda"}`).
-- `app/tools/qa.py` implementa la capa de **ejecución Playwright**: las funciones
-  `_click_via_text()`, `_click_via_role()`, `_fill_via()`, `_hover_via_attr()`
-  etc. resuelven cada acción usando las APIs nativas de localización de Playwright
-  (`get_by_text`, `get_by_role`, `get_by_label`, `locator()` con selectores CSS).
-- `app/semantic.py` implementa la **resolución semántica de 3 capas** como fallback
-  al parser regex: (1) reglas regex NLP, (2) snapshot de accesibilidad de Playwright
-  con resolución por roles, y (3) LLM multimodal como último recurso.
+## 2. Requisitos previos (Windows)
 
-### 1.1 Session Pool (`app/session_pool.py`)
+- Docker Desktop (con WSL2 habilitado) para Browserless.
+- Python 3.10 o superior (agregado al PATH).
+- Git.
 
-Pool de sesiones de navegador reutilizables con TTL configurable y evicción LRU.
-La clase `SessionPool` expone `acquire()`/`release()` y mantiene la conexión viva
-entre llamadas MCP, identificando cada sesión por `session_id` vía ContextVar.
-
-### 1.2 Deep Agent (`app/agents/deep_agent.py`)
-
-Agente autónomo construido con la librería `deepagents` (`create_deep_agent()`)
-que envuelve las 3 tools QA como tools de LangChain y se ejecuta como nodo `deep`
-del grafo.
-
-### 1.3 Reconexión automática (`app/tools/qa.py`)
-
-`qa_execute_user_flow` y `qa_audit_url` reconectan automáticamente
-(`MAX_RECONNECTS=3`) cuando la sesión remota muere a mitad de ejecución,
-capturando y restaurando las cookies de sesión.
-
----
-
-## 2. Requisitos previos en Windows
-
-- **Docker Desktop** (con WSL2 habilitado) para ejecutar el contenedor Browserless.
-- **Python 3.10 o superior** (agregado al `PATH` de Windows).
-- **Git** para clonar el repositorio.
-
----
-
-## 3. Instalación paso a paso (PowerShell)
-
-Abre **Windows PowerShell** y ejecuta:
+## 3. Instalación (PowerShell)
 
 ```powershell
 # 1. Clonar el repositorio
@@ -139,42 +73,23 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
-> **Nota:** si la activación del entorno virtual falla por la política de
-> ejecución de PowerShell, consulta la sección [Solución de problemas](#10-solución-de-problemas-comunes-en-windows).
-
----
+> Si la activacion falla por la politica de ejecucion de PowerShell, consulta la seccion [Solución de problemas](#8-solución-de-problemas-comunes-en-windows).
 
 ## 4. Levantar Browserless con Docker
-
-Ejecuta el siguiente comando para levantar el contenedor de Browserless en el
-puerto **3000**:
 
 ```powershell
 docker run -d -p 3000:3000 --name browserless -e "CONCURRENCY=10" ghcr.io/browserless/chromium
 ```
 
-- **`-p 3000:3000`** — mapea el puerto 3000 del contenedor al puerto 3000 del host.
-  Es el puerto que usa la variable `BROWSERBASE_URL` (`ws://localhost:3000`).
-- **`-e "CONCURRENCY=10"`** — limita a 10 el número de peticiones concurrentes que
-  Browserless procesa a la vez.
-- **`--name browserless`** — asigna un nombre fijo al contenedor para gestionarlo
-  fácilmente (`docker start browserless`, `docker stop browserless`, `docker logs browserless`).
-
-Verifica que el contenedor esté corriendo:
-
-```powershell
-docker ps
-```
-
----
+- `-p 3000:3000` — mapea el puerto 3000 usado por `BROWSERBASE_URL` (`ws://localhost:3000`).
+- `-e "CONCURRENCY=10"` — limita a 10 las peticiones concurrentes.
+- `--name browserless` — nombre fijo para gestionarlo (`docker start/stop/logs browserless`). Verificar con `docker ps`.
 
 ## 5. Configuración
 
-Toda la configuración se realiza mediante **variables de entorno**, que se leen en
-tiempo de ejecución desde `app/config.py`. Si existe un archivo `.env` en la raíz
-del proyecto, `python-dotenv` lo carga automáticamente.
+Variables de entorno leidas en tiempo de ejecucion por `app/config.py`; un archivo `.env` en la raiz se carga automáticamente via `python-dotenv`.
 
-### 5.1 Tabla de variables de entorno
+### 5.1 Variables de entorno
 
 | Variable | Default | Descripción |
 | --- | --- | --- |
@@ -198,8 +113,6 @@ del proyecto, `python-dotenv` lo carga automáticamente.
 
 ### 5.2 Ejemplo de archivo `.env`
 
-Crea un archivo `.env` en la raíz del proyecto (se carga automáticamente):
-
 ```dotenv
 # Navegador remoto
 BROWSERBASE_URL=ws://localhost:3000
@@ -210,7 +123,7 @@ VFA_LLM_PROVIDER=openai
 VFA_LLM_MODEL=gpt-4o
 OPENAI_API_KEY=tu-api-key-de-openai
 
-# Visión (opcional; si se omite, hereda del LLM)
+# Visión (opcional; hereda del LLM si se omite)
 VFA_VISION_PROVIDER=openai
 VFA_VISION_MODEL=gpt-4o
 
@@ -219,72 +132,31 @@ VFA_LLM_REQUESTS_PER_SECOND=0
 VFA_LLM_CHECKS_PER_SECOND=10.0
 ```
 
----
-
-## 6. Configuración en Windows PowerShell
-
-Puedes definir las variables de entorno directamente en la sesión de PowerShell
-con `$env:`. Los dos comandos originales del proyecto son:
+### 5.3 Variables en PowerShell
 
 ```powershell
 $env:STAGEHAND_BROWSER="browserless"
 $env:BROWSERBASE_URL="ws://localhost:3000"
-```
-
-Variables opcionales de LLM y visión:
-
-```powershell
 $env:VFA_LLM_PROVIDER="openai"
 $env:VFA_LLM_MODEL="gpt-4o"
 $env:OPENAI_API_KEY="tu-api-key"
 ```
 
-### Alternativas de persistencia
+Persistencia: `setx BROWSERBASE_URL "ws://localhost:3000"` y `setx STAGEHAND_BROWSER "browserless"` (permanente a nivel de usuario), o el archivo `.env` (recomendado).
 
-- **`setx` (persistente a nivel de usuario):** define la variable de forma
-  permanente para futuras sesiones de PowerShell.
-
-  ```powershell
-  setx BROWSERBASE_URL "ws://localhost:3000"
-  setx STAGEHAND_BROWSER "browserless"
-  ```
-
-- **Archivo `.env`:** la opción recomendada. Crea un archivo `.env` en la raíz del
-  proyecto (ver sección 5.2); `python-dotenv` lo carga automáticamente al importar
-  `app.config`.
-
----
-
-## 7. Ejecución del servidor MCP
-
-Con el entorno virtual activado y las variables configuradas, inicia el servidor:
+## 6. Ejecución del servidor MCP
 
 ```powershell
 python server_mcp.py
 ```
 
-El servidor usa el **transporte `stdio`** de MCP. Para conectarte desde un cliente
-MCP compatible, configura el comando `python server_mcp.py` como servidor MCP de
-tipo `stdio` (apuntando al intérprete de tu entorno virtual si es necesario). Una
-vez conectado, el servidor expone las **3 tools QA** descritas al inicio.
+Servidor MCP con transporte `stdio`: configuralo como servidor MCP tipo stdio en tu cliente (apuntando al interprete del venv si es necesario). Una vez conectado, expone las 3 tools QA descritas al inicio.
 
----
-
-## 8. Ejecución de pruebas
-
-Ejecuta la suite de pruebas existente en `tests/`:
+## 7. Ejecución de pruebas
 
 ```powershell
 pytest tests/
 ```
-
-O, de forma equivalente:
-
-```powershell
-python -m pytest tests/
-```
-
-La suite incluye:
 
 - `tests/test_server_mcp.py`
 - `tests/test_server_mcp_advanced.py`
@@ -295,62 +167,35 @@ La suite incluye:
 - `tests/test_qa_reconnect.py`
 - `tests/test_vfa_semantic_llm.py`
 
-La suite completa consta de 8 archivos de test, todos pasando.
+## 8. Solución de problemas comunes (Windows)
 
----
-
-## 9. Solución de problemas comunes en Windows
-
-### 9.1 El puerto 3000 está ocupado
-
-Si el contenedor no arranca porque el puerto 3000 ya está en uso, identifica el
-proceso que lo ocupa y deténlo, o cambia el mapeo de puertos:
+**Puerto 3000 ocupado:**
 
 ```powershell
 Get-NetTCPConnection -LocalPort 3000
 ```
 
-Si prefieres usar otro puerto, cambia el mapeo del contenedor y la variable
-`BROWSERBASE_URL` en consecuencia (p. ej. `-p 3001:3000` y
-`BROWSERBASE_URL=ws://localhost:3001`).
+O cambia el mapeo (p. ej. `-p 3001:3000`) y `BROWSERBASE_URL=ws://localhost:3001`.
 
-### 9.2 El contenedor no arranca
-
-Verifica que Docker Desktop esté en ejecución y revisa los logs del contenedor:
+**El contenedor no arranca:** verifica Docker Desktop; revisa logs o recrea el contenedor:
 
 ```powershell
 docker logs browserless
-```
 
-Si el contenedor quedó en un estado erróneo, elimínalo y vuelve a crearlo:
-
-```powershell
 docker rm -f browserless
 docker run -d -p 3000:3000 --name browserless -e "CONCURRENCY=10" ghcr.io/browserless/chromium
 ```
 
-### 9.3 Error de conexión `ws://`
-
-Si Playwright no consigue conectarse al navegador remoto, comprueba que:
-
-1. El contenedor Browserless esté corriendo (`docker ps`).
-2. `BROWSERBASE_URL` apunte a `ws://localhost:3000` (o al puerto mapeado).
+**Error de conexión `ws://`:** comprueba `docker ps` y que `BROWSERBASE_URL` apunte al puerto mapeado:
 
 ```powershell
 $env:BROWSERBASE_URL="ws://localhost:3000"
 ```
 
-### 9.4 PowerShell bloquea la activación del entorno virtual
-
-Si `.venv\Scripts\Activate.ps1` falla por la política de ejecución, permite
-scripts firmados de forma remota para el usuario actual:
+**PowerShell bloquea la activación del venv:**
 
 ```powershell
 Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
 ```
 
-o ejecuta PowerShell con la política omitida:
-
-```powershell
-powershell -ExecutionPolicy Bypass
-```
+O ejecuta con la politica omitida: `powershell -ExecutionPolicy Bypass`.
