@@ -30,13 +30,20 @@ flowchart TB
     T1 & T2 & T3 -->|"compilan y ejecutan el grafo"| Grafo
 
     subgraph Grafo["📊 Grafo LangGraph — app/graph/"]
-        S((START)) --> Browser["🌐 browser_node\nConexión Playwright CDP"]
+        S((START)) --> Browser["🌐 browser_node\nPlaywright CDP → Browserless\no Chromium local visible"]
         Browser --> Deep["🧠 deep_node\nDeep Agent · envuelve las 3 Tools QA"]
         Deep --> Router{"🔀 route_after_browser"}
-        Router -->|"Con steps"| Semantic["💬 semantic_node\nAnálisis semántico"]
+        Router -->|"Con steps"| Semantic["💬 semantic_node\nResolución semántica\n① regex NLP\n② accessibility snapshot\n③ LLM fallback"]
         Router -->|"Sin steps"| Vision["👁️ vision_node\nAnálisis visual LLM"]
         Vision --> Semantic
         Semantic --> E((END))
+    end
+
+    subgraph toolsQA["🔧 tools QA — NLP Parser · parser.py"]
+        direction LR
+        NLP["🗣️ 22+ regex multilingües\nES · EN → acciones"]
+        PW["🎭 Playwright Locators\nget_by_text · get_by_role · get_by_label · locator()"]
+        NLP --> PW
     end
 
     subgraph Infra["🏗️ Infraestructura"]
@@ -50,6 +57,7 @@ flowchart TB
     Pool --> BR
     Semantic --> LLM
     Vision --> LLM
+    Semantic --> toolsQA
 ```
 
 - La configuración central del proyecto vive en **`app/config.py`**, que lee las
@@ -73,6 +81,18 @@ flowchart TB
   navegador con TTL configurable y evicción LRU, reutilizables entre llamadas MCP.
 - `app/tools/qa.py` implementa **reconexión automática** cuando la sesión remota
   muere a mitad de ejecución, restaurando las cookies de sesión.
+
+- `app/tools/parser.py` contiene **22+ patrones regex multilingües** (ES/EN)
+  que componen la capa NLP del sistema: transforman instrucciones en lenguaje
+  natural (ej. *"clic en el botón de búsqueda"*) en acciones estructuradas
+  (ej. `{"action": "clic_boton", "texto": "búsqueda"}`).
+- `app/tools/qa.py` implementa la capa de **ejecución Playwright**: las funciones
+  `_click_via_text()`, `_click_via_role()`, `_fill_via()`, `_hover_via_attr()`
+  etc. resuelven cada acción usando las APIs nativas de localización de Playwright
+  (`get_by_text`, `get_by_role`, `get_by_label`, `locator()` con selectores CSS).
+- `app/semantic.py` implementa la **resolución semántica de 3 capas** como fallback
+  al parser regex: (1) reglas regex NLP, (2) snapshot de accesibilidad de Playwright
+  con resolución por roles, y (3) LLM multimodal como último recurso.
 
 ### 1.1 Session Pool (`app/session_pool.py`)
 
