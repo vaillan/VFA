@@ -50,6 +50,7 @@ flowchart TB
 - **Session Pool** (`app/session_pool.py`): pool de sesiones persistentes con TTL y evicción LRU. Conexión vía `app/browser.py` (Playwright + CDP Browserless).
 - **Deep Agent** (`app/agents/deep_agent.py`): agente autónomo de `deepagents` que envuelve las 3 tools QA como nodo `deep`.
 - **Reconexión** (`app/tools/qa.py`): reconexión automática (MAX_RECONNECTS=3) al perder la sesión remota.
+- **Captura** ([`app/capture.py`](app/capture.py)): listeners de consola JS, excepciones JS (`pageerror`) y fallos HTTP (status >= 400) en [`app/capture.py`](app/capture.py).
 - **NLP → Playwright** (`app/tools/parser.py`): 22+ regex multilingües → acciones Playwright. Fallback semántico en `app/semantic.py` (regex → accesibilidad → LLM).
 
 ## 2. Requisitos previos (Windows)
@@ -110,6 +111,8 @@ Variables de entorno leidas en tiempo de ejecucion por `app/config.py`; un archi
 | `VFA_SESSION_POOL_TTL` | `300` | Segundos de inactividad antes de cerrar una sesión. |
 | `VFA_SESSION_POOL_MAX_SIZE` | `5` | Máximo de sesiones simultáneas (evicción LRU). |
 | `NAVIGATION_WAIT_UNTIL` | `load` | Estrategia de espera de Playwright para navegación (`load`, `domcontentloaded`, `networkidle`, `commit`). Configurable vía variable de entorno. |
+| `HEADLESS` | `true` | Indica si el navegador corre en modo headless (`true`) o con ventana visible (`false`). |
+| `VFA_SESSION_STORAGE_STATE` | `session_storage_state.json` | Ruta del archivo storageState (cookies de Playwright) persistido entre flujos para reutilizar sesiones. |
 
 ### 5.2 Ejemplo de archivo `.env`
 
@@ -126,6 +129,12 @@ OPENAI_API_KEY=tu-api-key-de-openai
 # Visión (opcional; hereda del LLM si se omite)
 VFA_VISION_PROVIDER=openai
 VFA_VISION_MODEL=gpt-4o
+
+# Headless (opcional, default true)
+# HEADLESS=false
+
+# Storage State (opcional)
+# VFA_SESSION_STORAGE_STATE=session_storage_state.json
 
 # Rate limiter (opcional)
 VFA_LLM_REQUESTS_PER_SECOND=0
@@ -166,6 +175,10 @@ pytest tests/
 - `tests/test_session_pool.py`
 - `tests/test_qa_reconnect.py`
 - `tests/test_vfa_semantic_llm.py`
+- `tests/test_parser.py`
+- `tests/test_parser_actions.py`
+- `tests/test_qa_scroll.py`
+- `tests/test_semantic_deterministic.py`
 
 ## 8. Solución de problemas comunes (Windows)
 
