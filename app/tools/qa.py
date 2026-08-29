@@ -12,9 +12,10 @@ import re
 from typing import Any, Dict, List, Optional
 
 from langchain_core.messages import HumanMessage
+from playwright.async_api import async_playwright
 
 from app import config
-from app.browser import _close_browser, _connect_browser, _is_session_dead, _new_page
+from app.browser import _close_browser, _is_session_dead, _new_page
 from app.capture import _attach_console_capture, _capture_network_errors
 from app.llm import get_vision_llm
 from app.semantic import _resolve_semantic_step
@@ -28,7 +29,7 @@ NAVIGATION_TIMEOUT_MS = 30000
 STEP_TIMEOUT_MS = 10000
 # Máximo de reconexiones permitidas ante la muerte de la sesión remota a mitad de flujo.
 MAX_RECONNECTS = 3
-NAVIGATION_WAIT_UNTIL = "networkidle"
+NAVIGATION_WAIT_UNTIL = os.environ.get("NAVIGATION_WAIT_UNTIL", "load")
 AUDIT_SCREENSHOT_FILENAME = "audit_screenshot.png"
 
 # Mapeo de nombres de teclas comunes a los códigos de Playwright.
@@ -65,12 +66,22 @@ _KEY_MAP: dict[str, str] = {
 
 
 async def _open_page():
-    """Conecta al navegador remoto y crea una página nueva.
+    """Conecta al Browserless Docker vía CDP y crea una página nueva.
+
+    El MCP VisualQA siempre usa el navegador remoto de Browserless en vez de
+    lanzar Chromium local (no requiere `playwright install chromium`).
 
     Returns:
         Tupla (browser, page): instancia del navegador conectado y la página nueva creada.
     """
-    browser = await _connect_browser()
+    p = await async_playwright().start()
+    try:
+        browser = await p.chromium.connect_over_cdp(config.get_browserbase_url())
+    except Exception:
+        await p.stop()
+        raise
+    # Mantener el driver vivo para que _close_browser pueda detenerlo.
+    browser._playwright = p
     page = await _new_page(browser)
     return browser, page
 

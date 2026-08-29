@@ -2,10 +2,12 @@
 
 **VFA — Visual & Functional Auditor** es un servidor MCP
 (Model Context Protocol) construido con **FastMCP** que expone tres herramientas
-de QA para auditar aplicaciones web en un navegador remoto **Browserless**
-(ejecutado en Docker). El agente usa **Playwright** para conectarse al navegador
-remoto vía CDP, captura errores de consola y de red, ejecuta flujos de usuario en
-lenguaje natural y analiza visualmente las páginas con un modelo LLM multimodal.
+de QA — `qa_audit_url`, `qa_execute_user_flow` y `qa_get_runtime_errors` — para
+auditar aplicaciones web. Las tools del MCP VisualQA se conectan al navegador
+remoto **Browserless** (ejecutado en Docker) vía CDP usando **Playwright**; no
+lanzan un Chromium local. El agente captura errores de consola y de red, ejecuta
+flujos de usuario en lenguaje natural y analiza visualmente las páginas con un
+modelo LLM multimodal.
 
 El servidor expone exactamente **3 tools QA**:
 
@@ -115,9 +117,6 @@ python -m venv .venv
 
 # 3. Instalar dependencias
 pip install -r requirements.txt
-
-# 4. Instalar el navegador Chromium de Playwright
-playwright install chromium
 ```
 
 > **Nota:** si la activación del entorno virtual falla por la política de
@@ -175,6 +174,7 @@ del proyecto, `python-dotenv` lo carga automáticamente.
 | `VFA_SESSION_POOL_ENABLED` | `true` | Activa el pool de sesiones persistentes entre llamadas a tools QA. |
 | `VFA_SESSION_POOL_TTL` | `300` | Segundos de inactividad antes de cerrar una sesión. |
 | `VFA_SESSION_POOL_MAX_SIZE` | `5` | Máximo de sesiones simultáneas (evicción LRU). |
+| `NAVIGATION_WAIT_UNTIL` | `load` | Estrategia de espera de Playwright para navegación (`load`, `domcontentloaded`, `networkidle`, `commit`). Configurable vía variable de entorno. |
 
 ### 5.2 Ejemplo de archivo `.env`
 
