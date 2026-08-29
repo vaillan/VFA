@@ -45,12 +45,12 @@ flowchart TB
     Semantic --> toolsQA
 ```
 
-- **Config:** `app/config.py` lee las variables de entorno con carga automatica desde `.env` vía `python-dotenv`.
-- **Grafo LangGraph** (`app/graph/`): `state.py` define el estado tipado `VFAState`; `builder.py` expone `build_graph()`/`get_compiled_graph()` ensamblando el `StateGraph`; los nodos async `browser_node`, `deep_node`, `vision_node`, `semantic_node` y el router `route_after_browser` viven en `app/agents/` (browser_agent.py, deep_agent.py, vision_agent.py, semantic_agent.py), con re-exports de compatibilidad en `app/graph/nodes.py`. Flujo: START → browser → deep → condicional (semantic si hay steps, vision si no) → vision → semantic → END. `server_mcp.py` compila y usa el grafo; la API publica de las 3 tools MCP no cambia.
-- **Session Pool** (`app/session_pool.py`): pool de sesiones de navegador reutilizables entre llamadas MCP, con TTL configurable y eviccion LRU; la clase `SessionPool` expone `acquire()`/`release()` e identifica cada sesion por `session_id` vía ContextVar. La conexion al navegador remoto se realiza en `app/browser.py` (Playwright + CDP Browserless; modo local visible si `HEADLESS=false`).
-- **Deep Agent** (`app/agents/deep_agent.py`): agente autónomo de `deepagents` (`create_deep_agent()`) que envuelve las 3 tools QA como tools de LangChain y se ejecuta como nodo `deep` del grafo.
-- **Reconexion automatica** (`app/tools/qa.py`): `qa_audit_url` y `qa_execute_user_flow` reconectan automáticamente (MAX_RECONNECTS=3) cuando la sesion remota muere a mitad de ejecucion, capturando y restaurando las cookies de sesion.
-- **Capa NLP → Playwright** (`app/tools/parser.py` → `app/tools/qa.py`): 22+ patrones regex multilingues (ES/EN) convierten lenguaje natural en acciones estructuradas, resueltas con locators nativos de Playwright (`get_by_text`, `get_by_role`, `get_by_label`, `locator()`). `app/semantic.py` implementa el fallback de 3 capas: regex NLP → snapshot de accesibilidad → LLM multimodal. `requirements.txt` incluye `langgraph>=0.2` y ya no incluye `crewai`.
+- **Config:** `app/config.py` — variables de entorno vía `python-dotenv`.
+- **Grafo LangGraph** (`app/graph/`): orquestador con nodos `browser`, `deep`, `vision`, `semantic` y router condicional. Flujo: START → browser → deep → (semantic|vision) → semantic → END.
+- **Session Pool** (`app/session_pool.py`): pool de sesiones persistentes con TTL y evicción LRU. Conexión vía `app/browser.py` (Playwright + CDP Browserless).
+- **Deep Agent** (`app/agents/deep_agent.py`): agente autónomo de `deepagents` que envuelve las 3 tools QA como nodo `deep`.
+- **Reconexión** (`app/tools/qa.py`): reconexión automática (MAX_RECONNECTS=3) al perder la sesión remota.
+- **NLP → Playwright** (`app/tools/parser.py`): 22+ regex multilingües → acciones Playwright. Fallback semántico en `app/semantic.py` (regex → accesibilidad → LLM).
 
 ## 2. Requisitos previos (Windows)
 
