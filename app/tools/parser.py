@@ -268,18 +268,18 @@ def parse_step(paso: str) -> Optional[dict]:
     if match_esperar_el:
         return {"action": "esperar_elemento", "texto": match_esperar_el.group(1).strip()}
 
-    # 13. Leer contenido (antes que capturar contenido, por "extraer texto").
-    match_leer = RE_LEER.match(paso_lower)
-    if match_leer:
-        return {"action": "leer"}
-
-    # 14. Capturar contenido (antes que capturar pantalla).
+    # 13. Capturar contenido (antes que leer, por "extraer texto").
     match_capturar_contenido = RE_CAPTURAR_CONTENIDO.match(paso_lower)
     if match_capturar_contenido:
         return {
             "action": "capturar_contenido",
             "tipo": match_capturar_contenido.group(1).strip(),
         }
+
+    # 14. Leer contenido (después de capturar contenido).
+    match_leer = RE_LEER.match(paso_lower)
+    if match_leer:
+        return {"action": "leer"}
 
     # 15. Capturar pantalla.
     if RE_CAPTURAR.match(paso_lower):

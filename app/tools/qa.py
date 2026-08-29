@@ -427,7 +427,13 @@ async def _click_via_text(page, texto, method: str = "click") -> bool:
         await getattr(loc, method)(timeout=STEP_TIMEOUT_MS)
         return True
     except Exception:
-        return False
+        # Fallback: si el locator no soporta .click() directo, intentar con .first
+        try:
+            await _scroll_into_view(first)
+            await getattr(first, method)(timeout=STEP_TIMEOUT_MS)
+            return True
+        except Exception:
+            return False
 
 
 async def _click_via_role(page, candidate, method: str = "click") -> bool:
@@ -881,6 +887,7 @@ async def _execute_step(page, paso: str) -> Dict[str, Any]:
     matched = False
     resultado: Optional[str] = None
     parsed = parser.parse_step(paso)
+    regex_matched = parsed is not None
     if parsed is not None:
         if parsed["action"] == "clic":
             if await _click_objetivo(page, parsed["texto"]):
@@ -956,14 +963,17 @@ async def _execute_step(page, paso: str) -> Dict[str, Any]:
                 matched = True
 
     if not matched:
-        strategy = await _resolve_semantic_step(page, paso)
-        if strategy == "unsupported":
-            return {
-                "step": paso,
-                "status": "error",
-                "strategy": strategy,
-                "error": "Paso no soportado por el parser regex ni por el fallback semántico.",
-            }
+        if regex_matched:
+            strategy = "regex"
+        else:
+            strategy = await _resolve_semantic_step(page, paso)
+            if strategy == "unsupported":
+                return {
+                    "step": paso,
+                    "status": "error",
+                    "strategy": strategy,
+                    "error": "Paso no soportado por el parser regex ni por el fallback semántico.",
+                }
     entry: Dict[str, Any] = {"step": paso, "status": "ok", "strategy": strategy}
     if resultado is not None:
         entry["resultado"] = resultado
