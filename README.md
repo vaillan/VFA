@@ -1,3 +1,5 @@
+# AIDevTeam
+
 # VFA — Visual & Functional Auditor
 
 VFA (Visual & Functional Auditor) es un servidor MCP construido con FastMCP que audita aplicaciones web usando el navegador remoto Browserless (Docker) via CDP con Playwright y analisis LLM multimodal. Expone 3 tools QA: `qa_audit_url` (audita una URL y reporta errores de consola, excepciones JS y fallos HTTP), `qa_execute_user_flow` (ejecuta un flujo de usuario en lenguaje natural) y `qa_get_runtime_errors` (recupera los errores de ejecucion capturados).
@@ -234,4 +236,8 @@ $env:BROWSERBASE_URL="ws://localhost:3000"
 Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
 ```
 
-O ejecuta con la politica omitida: `powershell -ExecutionPolicy Bypass`.
+## Términos de uso
+
+Source available, no comercial. Prohibida la explotación comercial sin autorización.
+
+© 2026 AIDevTeam
