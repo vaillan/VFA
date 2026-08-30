@@ -53,13 +53,15 @@ flowchart TB
 - **Captura** ([`app/capture.py`](app/capture.py)): listeners de consola JS, excepciones JS (`pageerror`) y fallos HTTP (status >= 400) en [`app/capture.py`](app/capture.py).
 - **NLP → Playwright** (`app/tools/parser.py`): 22+ regex multilingües → acciones Playwright. Fallback semántico en `app/semantic.py` (regex → accesibilidad → LLM).
 
-## 2. Requisitos previos (Windows)
+## 2. Requisitos previos
 
-- Docker Desktop (con WSL2 habilitado) para Browserless.
-- Python 3.10 o superior (agregado al PATH).
+- Docker Desktop (Windows/macOS) o Docker Engine (Linux) para Browserless.
+- Python 3.10 o superior (agregado al PATH; en Linux/macOS el comando puede ser `python3`).
 - Git.
 
-## 3. Instalación (PowerShell)
+## 3. Instalación
+
+### Windows (PowerShell)
 
 ```powershell
 # 1. Clonar el repositorio
@@ -75,6 +77,21 @@ pip install -r requirements.txt
 ```
 
 > Si la activacion falla por la politica de ejecucion de PowerShell, consulta la seccion [Solución de problemas](#8-solución-de-problemas-comunes-en-windows).
+
+### Linux / macOS (bash/zsh)
+
+```bash
+# 1. Clonar el repositorio
+git clone <URL-del-repositorio>
+cd VFA
+
+# 2. Crear y activar el entorno virtual
+python3 -m venv .venv
+source .venv/bin/activate
+
+# 3. Instalar dependencias
+pip install -r requirements.txt
+```
 
 ## 4. Levantar Browserless con Docker
 
@@ -141,17 +158,23 @@ VFA_LLM_REQUESTS_PER_SECOND=0
 VFA_LLM_CHECKS_PER_SECOND=10.0
 ```
 
-### 5.3 Variables en PowerShell
+### 5.3 Configuración de variables de entorno (Windows / Linux / macOS)
+
+**Windows (PowerShell):**
 
 ```powershell
 $env:STAGEHAND_BROWSER="browserless"
 $env:BROWSERBASE_URL="ws://localhost:3000"
-$env:VFA_LLM_PROVIDER="openai"
-$env:VFA_LLM_MODEL="gpt-4o"
-$env:OPENAI_API_KEY="tu-api-key"
 ```
 
-Persistencia: `setx BROWSERBASE_URL "ws://localhost:3000"` y `setx STAGEHAND_BROWSER "browserless"` (permanente a nivel de usuario), o el archivo `.env` (recomendado).
+**Linux / macOS (bash/zsh):**
+
+```bash
+export STAGEHAND_BROWSER=browserless
+export BROWSERBASE_URL=ws://localhost:3000
+```
+
+Persistencia: en Windows, `setx BROWSERBASE_URL "ws://localhost:3000"` y `setx STAGEHAND_BROWSER "browserless"` (permanente a nivel de usuario); en Linux/macOS, añade las líneas `export` a `~/.bashrc` o `~/.zshrc`. La opción recomendada y multiplataforma es el archivo `.env` en la raíz del proyecto.
 
 ## 6. Ejecución del servidor MCP
 
