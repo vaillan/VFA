@@ -64,7 +64,7 @@ flowchart TB
 ```powershell
 # 1. Clonar el repositorio
 git clone <URL-del-repositorio>
-cd browserless
+cd VFA
 
 # 2. Crear y activar el entorno virtual
 python -m venv .venv
