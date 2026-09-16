@@ -48,6 +48,7 @@ flowchart TB
 ```
 
 - **Config:** `app/config.py` — variables de entorno vía `python-dotenv`.
+- **Modo de navegador:** lo decide `HEADLESS` en tiempo de ejecución (`app/config.get_headless()` → `app/browser.py`). Con `HEADLESS=true` el nodo `browser` se conecta a Browserless vía CDP; con `HEADLESS=false` lanza un Chromium local visible.
 - **Grafo LangGraph** (`app/graph/`): orquestador con nodos `browser`, `deep`, `vision`, `semantic` y router condicional. Flujo: START → browser → deep → (semantic|vision) → semantic → END.
 - **Session Pool** (`app/session_pool.py`): pool de sesiones persistentes con TTL y evicción LRU. Conexión vía `app/browser.py` (Playwright + CDP Browserless).
 - **Deep Agent** (`app/agents/deep_agent.py`): agente autónomo de `deepagents` que envuelve las 3 tools QA como nodo `deep`.
@@ -76,6 +77,9 @@ python -m venv .venv
 
 # 3. Instalar dependencias
 pip install -r requirements.txt
+
+# 4. Instalar dependencias de desarrollo (solo si vas a ejecutar las pruebas)
+pip install pytest
 ```
 
 > Si la activacion falla por la politica de ejecucion de PowerShell, consulta la seccion [Solución de problemas](#8-solución-de-problemas-comunes-en-windows).
@@ -93,6 +97,9 @@ source .venv/bin/activate
 
 # 3. Instalar dependencias
 pip install -r requirements.txt
+
+# 4. Instalar dependencias de desarrollo (solo si vas a ejecutar las pruebas)
+pip install pytest
 ```
 
 ## 4. Levantar Browserless con Docker
@@ -114,10 +121,8 @@ Variables de entorno leidas en tiempo de ejecucion por `app/config.py`; un archi
 | Variable | Default | Descripción |
 | --- | --- | --- |
 | `BROWSERBASE_URL` | `ws://localhost:3000` | URL del navegador remoto Browserless (endpoint CDP). |
-| `STAGEHAND_BROWSER` | *(sin default)* | Selecciona el navegador remoto usado por Playwright (`browserless`). |
 | `OPENAI_API_KEY` | *(sin default)* | API key de OpenAI. Usada como fallback para LLM y visión. |
 | `ANTHROPIC_API_KEY` | *(sin default)* | API key de Anthropic. Usada como fallback de visión si el proveedor es `anthropic`. |
-| `VISION_MODEL` | *(sin default)* | Modelo de visión configurado (si se omite, se usa el default del proveedor). |
 | `VFA_LLM_PROVIDER` | `openai` | Proveedor LLM por defecto (`openai`, `anthropic`, `ollama`, etc.). |
 | `VFA_LLM_MODEL` | `gpt-4o` | Modelo LLM por defecto. |
 | `VFA_LLM_API_KEY` | *(sin default)* | API key LLM genérica. Si no se define, se usa `OPENAI_API_KEY`. |
@@ -138,7 +143,6 @@ Variables de entorno leidas en tiempo de ejecucion por `app/config.py`; un archi
 ```dotenv
 # Navegador remoto
 BROWSERBASE_URL=ws://localhost:3000
-STAGEHAND_BROWSER=browserless
 
 # LLM
 VFA_LLM_PROVIDER=openai
@@ -165,18 +169,18 @@ VFA_LLM_CHECKS_PER_SECOND=10.0
 **Windows (PowerShell):**
 
 ```powershell
-$env:STAGEHAND_BROWSER="browserless"
+$env:HEADLESS="true"
 $env:BROWSERBASE_URL="ws://localhost:3000"
 ```
 
 **Linux / macOS (bash/zsh):**
 
 ```bash
-export STAGEHAND_BROWSER=browserless
+export HEADLESS=true
 export BROWSERBASE_URL=ws://localhost:3000
 ```
 
-Persistencia: en Windows, `setx BROWSERBASE_URL "ws://localhost:3000"` y `setx STAGEHAND_BROWSER "browserless"` (permanente a nivel de usuario); en Linux/macOS, añade las líneas `export` a `~/.bashrc` o `~/.zshrc`. La opción recomendada y multiplataforma es el archivo `.env` en la raíz del proyecto.
+Persistencia: en Windows, `setx BROWSERBASE_URL "ws://localhost:3000"` y `setx HEADLESS "true"` (permanente a nivel de usuario); en Linux/macOS, añade las líneas `export` a `~/.bashrc` o `~/.zshrc`. La opción recomendada y multiplataforma es el archivo `.env` en la raíz del proyecto.
 
 ## 6. Ejecución del servidor MCP
 
@@ -188,9 +192,13 @@ Servidor MCP con transporte `stdio`: configuralo como servidor MCP tipo stdio en
 
 ## 7. Ejecución de pruebas
 
+`pytest` no forma parte de las dependencias de ejecución (`requirements.txt`): se instala como dependencia de desarrollo en el paso 4 de la sección [Instalación](#3-instalación). Ejecuta los tests desde la raíz del proyecto y con el entorno virtual activado:
+
 ```powershell
 pytest tests/
 ```
+
+Suite de 12 módulos:
 
 - `tests/test_server_mcp.py`
 - `tests/test_server_mcp_advanced.py`
